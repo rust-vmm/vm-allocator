@@ -1,7 +1,7 @@
 [package]
-name = "crate-template"
+name = "vm-allocator"
 version = "0.1.0"
-authors = [TODO]
+authors = ["Liu Jiang <gerry@linux.alibaba.com>"]
 license = "Apache-2.0 OR BSD-3-Clause"
 edition = "2018"
 
