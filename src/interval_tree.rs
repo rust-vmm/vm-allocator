@@ -76,6 +76,45 @@ impl Range {
     pub fn intersect(&self, other: &Range) -> bool {
         max(self.min, other.min) <= min(self.max, other.max)
     }
+
+    /// Check whether the key is fully covered.
+    pub fn contain(&self, other: &Range) -> bool {
+        self.min <= other.min && self.max >= other.max
+    }
+
+    /// Create a new Range object with min aligned to `align`.
+    ///
+    /// # Examples
+    /// ```rust
+    /// extern crate vm_allocator;
+    /// use vm_allocator::Range;
+    ///
+    /// let a = Range::new(2u32, 6u32);
+    /// assert_eq!(a.align_to(0), Some(Range::new(2u32, 6u32)));
+    /// assert_eq!(a.align_to(1), Some(Range::new(2u16, 6u16)));
+    /// assert_eq!(a.align_to(2), Some(Range::new(2u64, 6u64)));
+    /// assert_eq!(a.align_to(4), Some(Range::new(4u8, 6u8)));
+    /// assert_eq!(a.align_to(8), None);
+    /// assert_eq!(a.align_to(3), None);
+    /// let b = Range::new(2u8, 2u8);
+    /// assert_eq!(b.align_to(2), Some(Range::new(2u8, 2u8)));
+    /// ```
+    pub fn align_to(&self, align: u64) -> Option<Range> {
+        match align {
+            0 | 1 => Some(*self),
+            _ => {
+                if align & (align - 1) != 0 {
+                    return None;
+                }
+                if let Some(min) = self.min.checked_add(align - 1).map(|v| v & !(align - 1)) {
+                    if min <= self.max {
+                        return Some(Range::new(min, self.max));
+                    }
+                }
+                None
+            }
+        }
+    }
 }
 
 impl Ord for Range {
@@ -188,6 +227,21 @@ impl<T> Node<T> {
         }
     }
 
+    /// Find the node covers full range of the `key`.
+    fn search_superset(&self, key: &Range) -> Option<&Self> {
+        if self.0.key.contain(key) {
+            Some(self)
+        } else if key.max < self.0.key.min && self.0.left.is_some() {
+            // Safe to unwrap() because we have just checked it.
+            self.0.left.as_ref().unwrap().search_superset(key)
+        } else if key.min > self.0.key.max && self.0.right.is_some() {
+            // Safe to unwrap() because we have just checked it.
+            self.0.right.as_ref().unwrap().search_superset(key)
+        } else {
+            None
+        }
+    }
+
     /// Insert a new (key, data) pair into the subtree.
     ///
     /// Note: it will panic if the new key intersects with existing nodes.
@@ -222,6 +276,34 @@ impl<T> Node<T> {
             }
         }
         self.updated_node()
+    }
+
+    /// Update an existing entry and return the old value.
+    fn update(&mut self, key: &Range, data: NodeState<T>) -> Option<T> {
+        match self.0.key.cmp(&key) {
+            Ordering::Equal => {
+                match (self.0.data.as_ref(), data.as_ref()) {
+                    (NodeState::<&T>::Free, NodeState::<&T>::Free)
+                    | (NodeState::<&T>::Free, NodeState::<&T>::Valued(_))
+                    | (NodeState::<&T>::Allocated, NodeState::<&T>::Free)
+                    | (NodeState::<&T>::Allocated, NodeState::<&T>::Allocated)
+                    | (NodeState::<&T>::Valued(_), NodeState::<&T>::Free)
+                    | (NodeState::<&T>::Valued(_), NodeState::<&T>::Allocated) => {
+                        panic!("try to update unallocated interval tree node");
+                    }
+                    _ => {}
+                }
+                self.0.data.replace(data).into()
+            }
+            Ordering::Less => match self.0.right.as_mut() {
+                None => None,
+                Some(node) => node.update(key, data),
+            },
+            Ordering::Greater => match self.0.left.as_mut() {
+                None => None,
+                Some(node) => node.update(key, data),
+            },
+        }
     }
 
     /// Delete `key` from the subtree.
@@ -418,6 +500,62 @@ impl<T> IntervalTree<T> {
         }
     }
 
+    /// Get the node fully covering the entire key range.
+    ///
+    /// # Examples
+    /// ```rust
+    /// extern crate vm_allocator;
+    /// use vm_allocator::{IntervalTree, Range, NodeState};
+    ///
+    /// let mut tree = IntervalTree::<u64>::new();
+    /// tree.insert(Range::new(0x100u32, 0x100u32), Some(1));
+    /// tree.insert(Range::new(0x200u32, 0x2ffu32), None);
+    /// assert_eq!(tree.get_superset(&Range::new(0x100u32, 0x100u32)),
+    ///            Some((&Range::new(0x100u32, 0x100u32), NodeState::Valued(&1))));
+    /// assert_eq!(tree.get_superset(&Range::new(0x210u32, 0x210u32)),
+    ///            Some((&Range::new(0x200u32, 0x2ffu32), NodeState::Free)));
+    /// assert_eq!(tree.get_superset(&Range::new(0x2ffu32, 0x2ffu32)),
+    ///            Some((&Range::new(0x200u32, 0x2ffu32), NodeState::Free)));
+    /// ```
+    pub fn get_superset(&self, key: &Range) -> Option<(&Range, NodeState<&T>)> {
+        match self.root {
+            None => None,
+            Some(ref node) => node
+                .search_superset(key)
+                .map(|n| (&n.0.key, n.0.data.as_ref())),
+        }
+    }
+
+    /// Get the value associated with the id.
+    ///
+    /// # Examples
+    /// ```rust
+    /// extern crate vm_allocator;
+    /// use vm_allocator::{IntervalTree, Range, NodeState};
+    ///
+    /// let mut tree = IntervalTree::<u32>::new();
+    /// tree.insert(Range::new(0x100u16, 0x100u16), Some(1));
+    /// tree.insert(Range::new(0x200u16, 0x2ffu16), None);
+    /// assert_eq!(tree.get_value_by_id(0x100u16), Some(&1));
+    /// assert_eq!(tree.get_value_by_id(0x210u32), None);
+    /// assert_eq!(tree.get_value_by_id(0x2ffu64), None);
+    /// ```
+    pub fn get_value_by_id<U>(&self, id: U) -> Option<&T>
+    where
+        u64: From<U>,
+    {
+        match self.root {
+            None => None,
+            Some(ref node) => {
+                let key = Range::new_point(id);
+                match node.search_superset(&key) {
+                    Some(node) => node.0.data.as_ref().into(),
+                    None => None,
+                }
+            }
+        }
+    }
+
     /// Insert the (key, data) pair into the interval tree, panic if intersects with existing nodes.
     ///
     /// # Examples
@@ -435,6 +573,32 @@ impl<T> IntervalTree<T> {
         match self.root.take() {
             None => self.root = Some(Node::new(key, data)),
             Some(node) => self.root = Some(node.insert(key, data)),
+        }
+    }
+
+    /// Update an existing entry and return the old value.
+    ///
+    /// # Examples
+    /// ```rust
+    /// extern crate vm_allocator;
+    /// use vm_allocator::{IntervalTree, Range, Constraint};
+    ///
+    /// let mut tree = IntervalTree::<u64>::new();
+    /// tree.insert(Range::new(0x100u64, 0x100u64), None);
+    /// tree.insert(Range::new(0x200u64, 0x2ffu64), None);
+    ///
+    /// let constraint = Constraint::new(2u32);
+    /// let key = tree.allocate(&constraint);
+    /// assert_eq!(key, Some(Range::new(0x200u64, 0x201u64)));
+    /// let old = tree.update(&Range::new(0x200u64, 0x201u64), 2);
+    /// assert_eq!(old, None);
+    /// let old = tree.update(&Range::new(0x200u64, 0x201u64), 3);
+    /// assert_eq!(old, Some(2));
+    /// ```
+    pub fn update(&mut self, key: &Range, data: T) -> Option<T> {
+        match self.root.as_mut() {
+            None => None,
+            Some(node) => node.update(key, NodeState::<T>::Valued(data)),
         }
     }
 
