@@ -815,6 +815,41 @@ mod tests {
     }
 
     #[test]
+    fn test_range_contain() {
+        let a = Range::new(2u8, 6u8);
+        assert!(a.contain(&Range::new(2u8, 3u8)));
+        assert!(a.contain(&Range::new(3u8, 4u8)));
+        assert!(a.contain(&Range::new(5u8, 5u8)));
+        assert!(a.contain(&Range::new(5u8, 6u8)));
+        assert!(a.contain(&Range::new(6u8, 6u8)));
+        assert!(!a.contain(&Range::new(1u8, 1u8)));
+        assert!(!a.contain(&Range::new(1u8, 2u8)));
+        assert!(!a.contain(&Range::new(1u8, 3u8)));
+        assert!(!a.contain(&Range::new(1u8, 7u8)));
+        assert!(!a.contain(&Range::new(7u8, 8u8)));
+        assert!(!a.contain(&Range::new(6u8, 7u8)));
+        assert!(!a.contain(&Range::new(7u8, 8u8)));
+    }
+
+    #[test]
+    fn test_range_align_to() {
+        let a = Range::new(2u32, 6);
+        assert_eq!(a.align_to(0), Some(Range::new(2u64, 6u64)));
+        assert_eq!(a.align_to(1), Some(Range::new(2u8, 6u8)));
+        assert_eq!(a.align_to(2), Some(Range::new(2u16, 6u16)));
+        assert_eq!(a.align_to(4), Some(Range::new(4u32, 6u32)));
+        assert_eq!(a.align_to(8), None);
+        assert_eq!(a.align_to(3), None);
+
+        let a = Range::new(0xFFFF_FFFF_FFFF_FFFDu64, 0xFFFF_FFFF_FFFF_FFFFu64);
+        assert_eq!(
+            a.align_to(2),
+            Some(Range::new(0xFFFF_FFFF_FFFF_FFFEu64, 0xFFFF_FFFF_FFFF_FFFF))
+        );
+        assert_eq!(a.align_to(4), None);
+    }
+
+    #[test]
     fn test_range_ord() {
         let a = Range::new(1u32, 4u32);
         let b = Range::new(1u32, 4u32);
@@ -846,5 +881,148 @@ mod tests {
         let mut tree = IntervalTree::<u64>::new();
         tree.insert(Range::new(0x100, 0x200u32), Some(1));
         tree.insert(Range::new(0x200, 0x2ffu64), None);
+    }
+
+    #[test]
+    fn test_tree_get_superset() {
+        let mut tree = IntervalTree::<u64>::new();
+        tree.insert(Range::new(0x100u64, 0x100u64), Some(1));
+        tree.insert(Range::new(0x200, 0x2ffu64), None);
+        assert_eq!(
+            tree.get_superset(&Range::new(0x100u32, 0x100)),
+            Some((&Range::new(0x100, 0x100u32), NodeState::Valued(&1)))
+        );
+        assert_eq!(
+            tree.get_superset(&Range::new(0x200u16, 0x200)),
+            Some((&Range::new(0x200, 0x2ffu64), NodeState::Free))
+        );
+        assert_eq!(
+            tree.get_superset(&Range::new(0x200u32, 0x2ff)),
+            Some((&Range::new(0x200, 0x2ffu16), NodeState::Free))
+        );
+        assert_eq!(
+            tree.get_superset(&Range::new(0x210u32, 0x210)),
+            Some((&Range::new(0x200, 0x2ffu32), NodeState::Free))
+        );
+        assert_eq!(
+            tree.get_superset(&Range::new(0x2ffu32, 0x2ff)),
+            Some((&Range::new(0x200, 0x2ffu32), NodeState::Free))
+        );
+        assert_eq!(tree.get_superset(&Range::new(0x2ffu32, 0x300)), None);
+        assert_eq!(tree.get_superset(&Range::new(0x300u32, 0x300)), None);
+        assert_eq!(tree.get_superset(&Range::new(0x1ffu32, 0x300)), None);
+    }
+
+    #[test]
+    fn test_tree_update() {
+        let mut tree = IntervalTree::<u64>::new();
+        tree.insert(Range::new(0x100u32, 0x100u32), None);
+        tree.insert(Range::new(0x200u32, 0x2ffu32), None);
+
+        let constraint = Constraint::new(2u32);
+        let key = tree.allocate(&constraint);
+        assert_eq!(key, Some(Range::new(0x200u32, 0x201u32)));
+        let old = tree.update(&Range::new(0x200u32, 0x201u32), 2);
+        assert_eq!(old, None);
+        let old = tree.update(&Range::new(0x200u32, 0x201u32), 3);
+        assert_eq!(old, Some(2));
+        let old = tree.update(&Range::new(0x200u32, 0x200u32), 4);
+        assert_eq!(old, None);
+        let old = tree.update(&Range::new(0x200u32, 0x203u32), 5);
+        assert_eq!(old, None);
+
+        tree.delete(&Range::new(0x200u32, 0x201u32));
+        let old = tree.update(&Range::new(0x200u32, 0x201u32), 2);
+        assert_eq!(old, None);
+    }
+
+    #[test]
+    fn test_tree_delete() {
+        let mut tree = IntervalTree::<u64>::new();
+        assert_eq!(tree.get(&Range::new(0x101u32, 0x101u32)), None);
+        assert!(tree.is_empty());
+        tree.insert(Range::new(0x100u32, 0x100u32), Some(1));
+        tree.insert(Range::new(0x200u32, 0x2ffu32), None);
+        assert!(!tree.is_empty());
+        assert_eq!(
+            tree.get(&Range::new(0x100u32, 0x100u32)),
+            Some(NodeState::Valued(&1))
+        );
+        assert_eq!(
+            tree.get(&Range::new(0x200u32, 0x2ffu32)),
+            Some(NodeState::Free)
+        );
+        assert_eq!(tree.get(&Range::new(0x101u32, 0x101u32)), None);
+
+        let old = tree.delete(&Range::new(0x100u32, 0x100u32));
+        assert_eq!(old, Some(1));
+        let old = tree.delete(&Range::new(0x200u32, 0x2ffu32));
+        assert_eq!(old, None);
+
+        assert!(tree.is_empty());
+        assert_eq!(tree.get(&Range::new(0x100u32, 0x100u32)), None);
+        assert_eq!(tree.get(&Range::new(0x200u32, 0x2ffu32)), None);
+    }
+
+    #[test]
+    fn test_allocate_free() {
+        let mut tree = IntervalTree::<u64>::new();
+        let mut constraint = Constraint::new(1u8);
+
+        assert_eq!(tree.allocate(&constraint), None);
+        tree.insert(Range::new(0x100u16, 0x100u16), None);
+        tree.insert(Range::new(0x200u16, 0x2ffu16), None);
+
+        let key = tree.allocate(&constraint);
+        assert_eq!(key, Some(Range::new(0x100u16, 0x100u16)));
+        let old = tree.update(&Range::new(0x100u16, 0x100u16), 2);
+        assert_eq!(old, None);
+        let val = tree.get(&Range::new(0x100u16, 0x100u16));
+        assert_eq!(val, Some(NodeState::Valued(&2)));
+
+        constraint.min = 0x100;
+        constraint.max = 0x100;
+        assert_eq!(tree.allocate(&constraint), None);
+
+        constraint.min = 0x201;
+        constraint.max = 0x300;
+        constraint.align = 0x8;
+        constraint.size = 0x10;
+        assert_eq!(
+            tree.allocate(&constraint),
+            Some(Range::new(0x208u16, 0x217u16))
+        );
+
+        // Free the node when it's still in 'Allocated' state.
+        let old = tree.free(&Range::new(0x208u16, 0x217u16));
+        assert_eq!(old, None);
+
+        // Reallocate the freed resource.
+        assert_eq!(
+            tree.allocate(&constraint),
+            Some(Range::new(0x208u16, 0x217u16))
+        );
+
+        constraint.size = 0x100;
+        assert_eq!(tree.allocate(&constraint), None);
+
+        // Verify that allocating a bigger range with smaller allocated range fails.
+        constraint.min = 0x200;
+        constraint.max = 0x2ff;
+        constraint.align = 0x8;
+        constraint.size = 0x100;
+        assert_eq!(tree.allocate(&constraint), None);
+
+        // Free the node when it's in 'Valued' state.
+        tree.update(&Range::new(0x208u16, 0x217u16), 0x10);
+        assert_eq!(tree.allocate(&constraint), None);
+        let old = tree.free(&Range::new(0x208u16, 0x217u16));
+        assert_eq!(old, Some(0x10));
+
+        // Reallocate the freed resource, verify that adjacent free nodes have been merged.
+        assert_eq!(
+            tree.allocate(&constraint),
+            Some(Range::new(0x200u32, 0x2ffu32))
+        );
     }
 }
