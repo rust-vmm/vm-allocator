@@ -6,6 +6,7 @@
 //! It's not designed as a generic interval tree, but specialized for VMM resource management.
 //! In addition to the normal get/insert/delete/update operations, it also implements allocate/free.
 
+use crate::{AllocPolicy, Constraint};
 use std::cmp::{max, min, Ordering};
 
 /// A closed interval range [min, max].
@@ -161,6 +162,14 @@ impl<T> NodeState<T> {
             NodeState::<T>::Valued(ref x) => NodeState::<&T>::Valued(x),
             NodeState::<T>::Allocated => NodeState::<&T>::Allocated,
             NodeState::<T>::Free => NodeState::<&T>::Free,
+        }
+    }
+
+    fn is_free(&self) -> bool {
+        if let NodeState::<T>::Free = self {
+            true
+        } else {
+            false
         }
     }
 }
@@ -424,6 +433,47 @@ impl<T> Node<T> {
         new_root.updated_node()
     }
 
+    fn find_candidate(&self, constraint: &Constraint) -> Option<&Self> {
+        match constraint.policy {
+            AllocPolicy::FirstMatch => self.first_match(constraint),
+            AllocPolicy::Default => self.first_match(constraint),
+        }
+    }
+
+    fn first_match(&self, constraint: &Constraint) -> Option<&Self> {
+        let mut candidate = if self.0.left.is_some() {
+            self.0.left.as_ref().unwrap().first_match(constraint)
+        } else {
+            None
+        };
+
+        if candidate.is_none() && self.check_constraint(constraint) {
+            candidate = Some(self);
+        }
+        if candidate.is_none() && self.0.right.is_some() {
+            candidate = self.0.right.as_ref().unwrap().first_match(constraint);
+        }
+        candidate
+    }
+
+    fn check_constraint(&self, constraint: &Constraint) -> bool {
+        if self.0.data.is_free() {
+            let min = std::cmp::max(self.0.key.min, constraint.min);
+            let max = std::cmp::min(self.0.key.max, constraint.max);
+            if min <= max {
+                let key = Range::new(min, max);
+                if constraint.align == 0 || constraint.align == 1 {
+                    return key.len() >= constraint.size;
+                }
+                return match key.align_to(constraint.align) {
+                    None => false,
+                    Some(aligned_key) => aligned_key.len() >= constraint.size,
+                };
+            }
+        }
+        false
+    }
+
     /// Update cached information of the node.
     /// Please make sure that the cached values of both children are up to date.
     fn update_cached_info(&mut self) {
@@ -626,6 +676,104 @@ impl<T> IntervalTree<T> {
             }
             None => None,
         }
+    }
+
+    /// Allocate a resource range according the allocation constraints.
+    ///
+    /// # Examples
+    /// ```rust
+    /// extern crate vm_allocator;
+    /// use vm_allocator::{IntervalTree, Range, Constraint};
+    ///
+    /// let mut tree = IntervalTree::<u64>::new();
+    /// tree.insert(Range::new(0x100u64, 0x100u64), None);
+    /// tree.insert(Range::new(0x200u64, 0x2ffu64), None);
+    ///
+    /// let constraint = Constraint::new(2u8);
+    /// let key = tree.allocate(&constraint);
+    /// assert_eq!(key, Some(Range::new(0x200u64, 0x201u64)));
+    /// tree.update(&Range::new(0x200u64, 0x201u64), 2);
+    /// ```
+    pub fn allocate(&mut self, constraint: &Constraint) -> Option<Range> {
+        if constraint.size == 0 {
+            return None;
+        }
+        let candidate = match self.root.as_mut() {
+            None => None,
+            Some(node) => node.find_candidate(constraint),
+        };
+
+        match candidate {
+            None => None,
+            Some(node) => {
+                let node_key = node.0.key;
+                let range = Range::new(
+                    max(node_key.min, constraint.min),
+                    min(node_key.max, constraint.max),
+                );
+                // Safe to unwrap because candidate satisfy the constraints.
+                let aligned_key = range.align_to(constraint.align).unwrap();
+                let result = Range::new(aligned_key.min, aligned_key.min + constraint.size - 1);
+
+                // Allocate a resource from the node, no need to split the candidate node.
+                if node_key.min == aligned_key.min && node_key.len() == constraint.size {
+                    self.root
+                        .as_mut()
+                        .unwrap()
+                        .update(&node_key, NodeState::<T>::Allocated);
+                    return Some(node_key);
+                }
+
+                // Split the candidate node.
+                // TODO: following algorithm is not optimal in preference of simplicity.
+                self.delete(&node_key);
+                if aligned_key.min > node_key.min {
+                    self.insert(Range::new(node_key.min, aligned_key.min - 1), None);
+                }
+                self.insert(result, None);
+                if result.max < node_key.max {
+                    self.insert(Range::new(result.max + 1, node_key.max), None);
+                }
+
+                self.root
+                    .as_mut()
+                    .unwrap()
+                    .update(&result, NodeState::<T>::Allocated);
+                Some(result)
+            }
+        }
+    }
+
+    /// Free an allocated range and return the associated data.
+    pub fn free(&mut self, key: &Range) -> Option<T> {
+        let result = self.delete(key);
+        let mut range = *key;
+
+        // Try to merge with adjacent free nodes.
+        if range.min > 0 {
+            if let Some((r, v)) = self.get_superset(&Range::new(range.min - 1, range.min - 1)) {
+                if v.is_free() {
+                    range.min = r.min;
+                }
+            }
+        }
+        if range.max < std::u64::MAX {
+            if let Some((r, v)) = self.get_superset(&Range::new(range.max + 1, range.max + 1)) {
+                if v.is_free() {
+                    range.max = r.max;
+                }
+            }
+        }
+
+        if range.min < key.min {
+            self.delete(&Range::new(range.min, key.min - 1));
+        }
+        if range.max > key.max {
+            self.delete(&Range::new(key.max + 1, range.max));
+        }
+        self.insert(range, None);
+
+        result
     }
 }
 
