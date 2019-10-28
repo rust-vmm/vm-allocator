@@ -1,10 +1,47 @@
 // Copyright (C) 2019 Alibaba Cloud. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A special interval tree implementation for VMM resource management.
+//! An interval tree implementation specialized for VMM resource management.
 //!
 //! It's not designed as a generic interval tree, but specialized for VMM resource management.
 //! In addition to the normal get/insert/delete/update operations, it also implements allocate/free.
+//!
+//! # Examples
+//! ```rust
+//! extern crate vm_allocator;
+//! use vm_allocator::{IntervalTree, Range, Constraint, NodeState};
+//!
+//! // Create an interval tree and add available resources.
+//! let mut tree = IntervalTree::<u64>::new();
+//! tree.insert(Range::new(0x100u32, 0x100u32), None);
+//! tree.insert(Range::new(0x200u16, 0x2ffu16), None);
+//!
+//! // Allocate a range with constraints.
+//! let mut constraint = Constraint::new(8u64);
+//! constraint.min = 0x211;
+//! constraint.max = 0x21f;
+//! constraint.align = 0x8;
+//!
+//! let key = tree.allocate(&constraint);
+//! assert_eq!(key, Some(Range::new(0x218u64, 0x21fu64)));
+//! let val = tree.get(&Range::new(0x218u64, 0x21fu64));
+//! assert_eq!(val, Some(NodeState::Allocated));
+//!
+//! // Associate data with the allocated range and mark the range as occupied.
+//! // Note: caller needs to protect from concurrent access between allocate() and the first call
+//! // to update() to mark range as occupied.
+//! let old = tree.update(&Range::new(0x218u32, 0x21fu32), 2);
+//! assert_eq!(old, None);
+//! let old = tree.update(&Range::new(0x218u32, 0x21fu32), 3);
+//! assert_eq!(old, Some(2));
+//! let val = tree.get(&Range::new(0x218u32, 0x21fu32));
+//! assert_eq!(val, Some(NodeState::Valued(&3)));
+//!
+//! // Free allocated resource.
+//! let old = tree.free(key.as_ref().unwrap());
+//! assert_eq!(old, Some(3));
+//!
+//! ```
 
 use crate::{AllocPolicy, Constraint};
 use std::cmp::{max, min, Ordering};
@@ -236,7 +273,7 @@ impl<T> Node<T> {
         }
     }
 
-    /// Find the node covers full range of the `key`.
+    /// Returns the node covers full range of the `key`.
     fn search_superset(&self, key: &Range) -> Option<&Self> {
         if self.0.key.contain(key) {
             Some(self)
@@ -501,7 +538,7 @@ fn max_key<T>(node: &Option<Node<T>>) -> u64 {
     node.as_ref().map_or(0, |n| n.0.max_key)
 }
 
-/// A specialized interval tree implementation for VMM resource management.
+/// An interval tree implementation specialized for VMM resource management.
 #[derive(Debug, Default)]
 pub struct IntervalTree<T> {
     root: Option<Node<T>>,
