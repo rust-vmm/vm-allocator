@@ -202,6 +202,14 @@ impl<T> NodeState<T> {
         }
     }
 
+    fn as_mut(&mut self) -> NodeState<&mut T> {
+        match self {
+            NodeState::<T>::Valued(ref mut x) => NodeState::<&mut T>::Valued(x),
+            NodeState::<T>::Allocated => NodeState::<&mut T>::Allocated,
+            NodeState::<T>::Free => NodeState::<&mut T>::Free,
+        }
+    }
+
     fn is_free(&self) -> bool {
         if let NodeState::<T>::Free = self {
             true
@@ -273,7 +281,7 @@ impl<T> Node<T> {
         }
     }
 
-    /// Returns the node covers full range of the `key`.
+    /// Returns a shared reference to the node covers full range of the `key`.
     fn search_superset(&self, key: &Range) -> Option<&Self> {
         if self.0.key.contain(key) {
             Some(self)
@@ -283,6 +291,21 @@ impl<T> Node<T> {
         } else if key.min > self.0.key.max && self.0.right.is_some() {
             // Safe to unwrap() because we have just checked it.
             self.0.right.as_ref().unwrap().search_superset(key)
+        } else {
+            None
+        }
+    }
+
+    /// Returns a mutable reference to the node covers full range of the `key`.
+    fn search_superset_mut(&mut self, key: &Range) -> Option<&mut Self> {
+        if self.0.key.contain(key) {
+            Some(self)
+        } else if key.max < self.0.key.min && self.0.left.is_some() {
+            // Safe to unwrap() because we have just checked it.
+            self.0.left.as_mut().unwrap().search_superset_mut(key)
+        } else if key.min > self.0.key.max && self.0.right.is_some() {
+            // Safe to unwrap() because we have just checked it.
+            self.0.right.as_mut().unwrap().search_superset_mut(key)
         } else {
             None
         }
@@ -587,7 +610,7 @@ impl<T> IntervalTree<T> {
         }
     }
 
-    /// Get the node fully covering the entire key range.
+    /// Get a shared reference to the node fully covering the entire key range.
     ///
     /// # Examples
     /// ```rust
@@ -613,7 +636,33 @@ impl<T> IntervalTree<T> {
         }
     }
 
-    /// Get the value associated with the id.
+    /// Get a mutable reference to the node fully covering the entire key range.
+    ///
+    /// # Examples
+    /// ```rust
+    /// extern crate vm_allocator;
+    /// use vm_allocator::{IntervalTree, Range, NodeState};
+    ///
+    /// let mut tree = IntervalTree::<u64>::new();
+    /// tree.insert(Range::new(0x100u32, 0x100u32), Some(1));
+    /// tree.insert(Range::new(0x200u32, 0x2ffu32), None);
+    /// assert_eq!(tree.get_superset_mut(&Range::new(0x100u32, 0x100u32)),
+    ///            Some((&Range::new(0x100u32, 0x100u32), NodeState::Valued(&mut 1))));
+    /// assert_eq!(tree.get_superset_mut(&Range::new(0x210u32, 0x210u32)),
+    ///            Some((&Range::new(0x200u32, 0x2ffu32), NodeState::Free)));
+    /// assert_eq!(tree.get_superset_mut(&Range::new(0x2ffu32, 0x2ffu32)),
+    ///            Some((&Range::new(0x200u32, 0x2ffu32), NodeState::Free)));
+    /// ```
+    pub fn get_superset_mut(&mut self, key: &Range) -> Option<(&Range, NodeState<&mut T>)> {
+        match self.root {
+            None => None,
+            Some(ref mut node) => node
+                .search_superset_mut(key)
+                .map(|n| (&n.0.key, n.0.data.as_mut())),
+        }
+    }
+
+    /// Get a shared reference to the value associated with the id.
     ///
     /// # Examples
     /// ```rust
@@ -623,11 +672,11 @@ impl<T> IntervalTree<T> {
     /// let mut tree = IntervalTree::<u32>::new();
     /// tree.insert(Range::new(0x100u16, 0x100u16), Some(1));
     /// tree.insert(Range::new(0x200u16, 0x2ffu16), None);
-    /// assert_eq!(tree.get_value_by_id(0x100u16), Some(&1));
-    /// assert_eq!(tree.get_value_by_id(0x210u32), None);
-    /// assert_eq!(tree.get_value_by_id(0x2ffu64), None);
+    /// assert_eq!(tree.get_by_id(0x100u16), Some(&1));
+    /// assert_eq!(tree.get_by_id(0x210u32), None);
+    /// assert_eq!(tree.get_by_id(0x2ffu64), None);
     /// ```
-    pub fn get_value_by_id<U>(&self, id: U) -> Option<&T>
+    pub fn get_by_id<U>(&self, id: U) -> Option<&T>
     where
         u64: From<U>,
     {
@@ -637,6 +686,36 @@ impl<T> IntervalTree<T> {
                 let key = Range::new_point(id);
                 match node.search_superset(&key) {
                     Some(node) => node.0.data.as_ref().into(),
+                    None => None,
+                }
+            }
+        }
+    }
+
+    /// Get a mutable reference to the value associated with the id.
+    ///
+    /// # Examples
+    /// ```rust
+    /// extern crate vm_allocator;
+    /// use vm_allocator::{IntervalTree, Range, NodeState};
+    ///
+    /// let mut tree = IntervalTree::<u32>::new();
+    /// tree.insert(Range::new(0x100u16, 0x100u16), Some(1));
+    /// tree.insert(Range::new(0x200u16, 0x2ffu16), None);
+    /// assert_eq!(tree.get_by_id_mut(0x100u16), Some(&mut 1));
+    /// assert_eq!(tree.get_by_id_mut(0x210u32), None);
+    /// assert_eq!(tree.get_by_id_mut(0x2ffu64), None);
+    /// ```
+    pub fn get_by_id_mut<U>(&mut self, id: U) -> Option<&mut T>
+    where
+        u64: From<U>,
+    {
+        match self.root {
+            None => None,
+            Some(ref mut node) => {
+                let key = Range::new_point(id);
+                match node.search_superset_mut(&key) {
+                    Some(node) => node.0.data.as_mut().into(),
                     None => None,
                 }
             }
