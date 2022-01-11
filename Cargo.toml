@@ -1,8 +1,10 @@
 [package]
-name = "crate-template"
+name = "vm-allocator"
 version = "0.1.0"
-authors = [TODO]
+authors = ["rust-vmm AWS maintainers <rust-vmm-maintainers@amazon.com>"]
+description = "Resource allocators."
 license = "Apache-2.0 OR BSD-3-Clause"
 edition = "2018"
 
 [dependencies]
+libc = ">=0.2.39"
