@@ -1,41 +1,91 @@
-# Crate Name
+# vm-allocator
 
-## Design
+`vm-allocator` is a crate designed to to provide allocation and release strategies
+that are needed by the VMM during the lifetime of a virtual machine. Possible
+resource types that a VMM could allocate using vm-allocator are MMIO addresses,
+PIO addresses, GSI numbers, device ids.
 
-TODO: This section should have a high-level design of the crate.
+We have decided to have two allocator implementations, one for resources that can
+be abstracted to an integer and another allocator for addresses. We chose
+to have a separate allocator for addresses to add more semantic meaning to this
+resources (i.e. it needs informations like alignment which for resources like
+interrupt numbers are not needed). The main components are:
 
-Some questions that might help in writing this section:
-- What is the purpose of this crate?
-- What are the main components of the crate? How do they interact which each
-  other?
+- `IDAllocator` - which should be used for all resources that can be reduced to
+an integer type.
+- `AddressAllocator` - which should be used to allocate address ranges in different
+address spaces. This component is a wrapper over `IntervalTree` that adds semantics
+to address ranges.
 
-## Usage
+## ID Allocator
 
-TODO: This section describes how the crate is used.
+### Design
 
-Some questions that might help in writing this section:
-- What traits do users need to implement?
-- Does the crate have any default/optional features? What is each feature
-  doing?
-- Is this crate used by other rust-vmm components? If yes, how?
+This allocator should be used to allocate resources that can be reduced to an integer
+type like legacy GSI numbers or KVM memory slot IDs. The
+characteristics of such a resource are represented by the `IdAllocator` struct.
 
-## Examples
+The struct that defines the IdAllocator contains the ends of the interval that is
+managed, a field that points at the next available ID and a BTreeSet that is used
+to store the released IDs. We choosed to use a BTreeSet because the average
+complexity for deletion and insertion is O(logN) compared to Vec for example,
+another benefit is that the entries are sorted so we will always use the first
+available ID.
 
-TODO: Usage examples.
+#### Allocation policy
+
+When allocating a new ID we always try to return the smallest one available. To
+do that we first search in the BTreeSet for any ID that was released and if we
+cannot find anything there we return the next ID from the range that was never
+allocated.
 
 ```rust
-use my_crate;
-
-...
+/// Id allocator representation.
+pub struct IdAllocator {
+    // Begining of the range of IDs that we want to manage.
+    range_base: u32,
+    // First available id that was never allocated. 
+    next_id: Option<u32>,
+    // End of the range of IDs that we want to manage.
+    range_end: u32,
+    // Set of all freed ids that can be reused at subsequent allocations.
+    freed_ids: BTreeSet<u32>,
+}
 ```
+
+The `IdAllocator` struct implements methods for allocating and releasing IDs.
+
+```rust
+impl IdAllocator {
+    /// Creates a new instance of IdAllocator that will be used to manage the
+    /// allocation and release of ids from the interval specified by
+    /// `range_base` and `range_max`
+    pub fn new(range_base: u32, range_end: u32) -> std::result::Result<Self, Error> { }
+
+    /// Allocate an ID from the managed ranged.
+    pub fn allocate_id(&mut self) -> Result { }
+
+    /// Frees an id from the managed range.
+    pub fn free_id(&mut self, id: u32) -> Result { }
+}
+```
+
+### Usage
+
+Add vm-allocator as a dependency in Cargo.toml
+
+```toml
+[dependencies]
+vm-allocator = "*"
+````
+
+Then add extern crate vm-allocator; to projects crate root.
+The VMM using this crate should instantiate an IdAllocator object for each resource
+type they want to manage.
 
 ## License
 
-**!!!NOTICE**: The BSD-3-Clause license is not included in this template.
-The license needs to be manually added because the text of the license file
-also includes the copyright. The copyright can be different for different
-crates. If the crate contains code from CrosVM, the crate must add the
-CrosVM copyright which can be found
-[here](https://chromium.googlesource.com/chromiumos/platform/crosvm/+/master/LICENSE).
-For crates developed from scratch, the copyright is different and depends on
-the contributors.
+This project is licensed under either of
+
+- [Apache License](http://www.apache.org/licenses/LICENSE-2.0), Version 2.0
+- [BSD-3-Clause License](https://opensource.org/licenses/BSD-3-Clause)
