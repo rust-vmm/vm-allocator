@@ -70,6 +70,86 @@ impl IdAllocator {
 }
 ```
 
+## AddressAllocator
+
+### Design address allocator
+
+This allocator should be used to allocate memory slots, either for memmory-mapped
+I/O or for port I/O or any other kind of address space.
+
+The struct that defined the AddressAllocator contains the ends of the interval
+that is managed and an instance of `interval_tree` as an allocation engine. We
+chose to use `interval_tree` for memory slots allocation because it provides
+better creation performance and more query speed.
+
+```rust
+/// Address allocator representation
+pub struct AddressAllocator {
+    // Begining of the address space that we want to manage.
+    base: u64,
+    // End of the address space that we want to manage.
+    end: u64,
+    // Allocation engine, the allocation logic that is interfaced
+    // by AddressAllocator
+    interval_tree: IntervalTree,
+}
+````
+
+The `AddressAllocator` struct implements methods for allocating and releasing
+memory slots from the managed address space.
+
+```rust
+impl AddressAllocator {
+    ///  Creates a new AddressAllocator object with an empty IntervalTree
+    pub fn new(base: u64, size: u64) -> std::result::Result<Self, Error> { }
+
+    /// Allocate a resource range according the allocation constraints.
+    pub fn allocate(
+        &mut self,
+        _address: Option<u64>,
+        size: u64,
+        align_size: Option<u64>,
+        alloc_policy: AllocPolicy,
+    ) -> Result<Range> { }
+
+    /// Free an allocated range.
+    pub fn free(&mut self, key: &Range) -> Result<()> { }
+```
+
+Struct Constraint is used to describe the overall information of the resource needed to be allocated.
+
+```rust
+/// Struct to describe resource allocation constraints.
+pub struct Constraint {
+    /// Size to allocate.
+    pub size: u64,
+    /// Lower boundary for the allocated resource.
+    pub min: u64,
+    /// Upper boundary for the allocated resource.
+    pub max: u64,
+    /// Alignment for the allocated resource.
+    pub align: u64,
+    /// Resource allocation policy.
+    pub policy: AllocPolicy,
+}
+
+impl Constraint {
+    /// Create a new constraint object with default settings.
+    pub fn new(size: u64) -> Self { }
+
+    /// Set the min constraint.
+    pub fn min(mut self, min: u64) -> Self { }
+
+    /// Set the max constraint.
+    pub fn max(mut self, max: u64) -> Self { }
+
+    /// Set the alignment constraint.
+    pub fn align(mut self, align: u64) -> Self { }
+
+    /// Set the allocation policy.
+    pub fn policy(mut self, policy: AllocPolicy) -> Self { }
+```
+
 ### Usage
 
 Add vm-allocator as a dependency in Cargo.toml
