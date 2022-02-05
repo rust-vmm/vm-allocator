@@ -4,6 +4,8 @@
 
 #![deny(missing_docs)]
 
+/// Allocation engine used by address allocator.
+pub mod allocation_engine;
 mod id_allocator;
 
 pub use crate::id_allocator::IdAllocator;
@@ -13,8 +15,8 @@ use thiserror::Error;
 /// Error type for IdAllocator usage.
 #[derive(Debug, PartialEq, Error)]
 pub enum Error {
-    /// All ids from the range specified are exhausted.
-    #[error("Id counter overflowed.")]
+    /// Management operations on desired resource resulted in overflow.
+    #[error("Management operations on desired resource resulted in overflow.")]
     Overflow,
     /// An id that is not part of the specified range was requested to be released.
     #[error("Specified id: {0} is not in the range.")]
@@ -31,6 +33,9 @@ pub enum Error {
     /// The range to manage is invalid.
     #[error("The range specified: {0}-{1} is not valid.")]
     InvalidRange(u64, u64),
+    /// Alignment value is invalid
+    #[error("Alignment value is invalid.")]
+    InvalidAlignment,
 }
 
 /// Wrapper over std::result::Result
