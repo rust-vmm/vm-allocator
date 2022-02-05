@@ -1,0 +1,79 @@
+# Design
+
+## Allocation engine
+
+This implementation uses an interval tree that is specialized for allocation of
+memory-mapped I/O and port I/O address space. The fields of the structures
+defined will have semantic meaning for this context (e.g. node state to indicate
+if a node in the tree is assigned or not to a device).
+
+We offer three options for placing a memory slot in the managed address space:
+
+1. `LastMatch` -> When using this allocation policy the allocator will try to
+insert the range described by the constraint at the first available position
+starting from the end of the managed address space.
+2. `FirstMatch` -> When using this allocation policy the allocator will try to
+insert the range described by the constraint at the first available position
+starting from the beginning of the managed address space.
+3. `ExactMatch(u64)` -> When using this allocation policy the allocator will try
+to insert the range at the exact position described by the constraint, otherwise
+it will return an error.
+
+Struct `Constraint` is used to describe the overall information of the resource
+needed to be allocated. This structure is also used by IntervalTree to know where
+and how to allocate the resource. The fields that are mandatory for allocating
+a new memory slot are size of the slot, alignment of the slot and allocation policy.
+Optionally the user can specify a range where the allocator will place the allocated
+memory slot.
+
+## Interval tree
+
+An interval tree is a tree data structure used for storing information about intervals.
+Specifically, it allows one to efficiently identify intervals that are overlapping
+with a given point, or another interval. We considered that this characteristic
+makes this data structure appropriate to be used as an allocation engine for
+memory slots inside an address space. The time complexity of an interval tree,
+namely O(log ⁡n+m) for queries, O(log n) for creation and O(log n) for insertion
+and deletion of nodes. The key of each node of the tree is represented using a
+struct named `Range` that contains the bounds of the address space. Each node in
+the tree can have two states, either `Free` or `Allocated`. Beside the information
+presented above the representation of a node also contains references two the
+children node of the current node.
+
+## Usage
+
+To use the `IntervalTree` implementation as an address allocator one should first
+create an interval tree object and give an address space as a root node. After,
+the user should create a constraint with the size for the resource. Optionally
+the constraint could also contain the maximum, minimum and alignment for the
+constraint.
+
+## State transition
+
+At the beginning, the interval tree will contain just one node that will represent
+the whole address space, the state of this node will be `NodeState::Free`.
+
+![InteralTree creation example](/images/first_node.png)
+
+When we allocate a memory slot, one of the nodes that have the state `NodeState::Free`
+will be split accordingly. A new node that has as the key a range representing the
+allocated memory slot will be inserted in the tree.
+
+![Node Allocation example](/images/interval_tree_allocation.png)
+
+When one of the allocated nodes is freed its state will be changed from `NodeState::Allocated`
+to `NodeState::Free` if there are two adjacent nodes that are not allocated then
+they will be merged in a single node.
+
+![Node Freeing example](/images/after_free.png)
+
+## License
+
+**!!!NOTICE**: The BSD-3-Clause license is not included in this template.
+The license needs to be manually added because the text of the license file
+also includes the copyright. The copyright can be different for different
+crates. If the crate contains code from CrosVM, the crate must add the
+CrosVM copyright which can be found
+[here](https://chromium.googlesource.com/chromiumos/platform/crosvm/+/master/LICENSE).
+For crates developed from scratch, the copyright is different and depends on
+the contributors.
