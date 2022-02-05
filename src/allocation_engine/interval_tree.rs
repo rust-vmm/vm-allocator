@@ -165,6 +165,13 @@ pub enum NodeState {
     Allocated,
 }
 
+impl NodeState {
+    #[allow(dead_code)]
+    pub(crate) fn is_free(&self) -> bool {
+        *self == NodeState::Free
+    }
+}
+
 /// Internal tree node to implement interval tree.
 #[derive(Debug, PartialEq)]
 struct InnerNode {
@@ -270,5 +277,13 @@ mod tests {
         let range = Range::new(3, 5).unwrap();
         assert_eq!(range.start(), 3);
         assert_eq!(range.end(), 5);
+    }
+
+    #[test]
+    fn test_is_free() {
+        let mut ns = NodeState::Allocated;
+        assert!(!ns.is_free());
+        ns = NodeState::Free;
+        assert!(ns.is_free());
     }
 }
