@@ -1,14 +1,14 @@
 # vm-allocator
 
-`vm-allocator` is a crate designed to to provide allocation and release strategies
+`vm-allocator` is a crate designed to provide allocation and release strategies
 that are needed by the VMM during the lifetime of a virtual machine. Possible
 resource types that a VMM could allocate using vm-allocator are MMIO addresses,
-PIO addresses, GSI numbers, device ids.
+PIO addresses, GSI numbers, device IDs.
 
 We have decided to have two allocator implementations, one for resources that can
 be abstracted to an integer and another allocator for addresses. We chose
 to have a separate allocator for addresses to add more semantic meaning to this
-resources (i.e. it needs informations like alignment which for resources like
+resource (i.e. it needs information like alignment which for resources like
 interrupt numbers are not needed). The main components are:
 
 - `IDAllocator` - which should be used for all resources that can be reduced to
@@ -27,9 +27,9 @@ characteristics of such a resource are represented by the `IdAllocator` struct.
 
 The struct that defines the IdAllocator contains the ends of the interval that is
 managed, a field that points at the next available ID and a BTreeSet that is used
-to store the released IDs. We choosed to use a BTreeSet because the average
-complexity for deletion and insertion is O(logN) compared to Vec for example,
-another benefit is that the entries are sorted so we will always use the first
+to store the released IDs. We choose to use a BTreeSet because the average
+complexity for deletion and insertion is O(log N) compared to Vec for example,
+another benefit is that the entries are sorted so, we will always use the first
 available ID.
 
 #### Allocation policy

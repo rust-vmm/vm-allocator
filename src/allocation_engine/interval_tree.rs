@@ -9,7 +9,7 @@ pub enum AllocPolicy {
     FirstMatch,
     /// Allocate first matched entry from the end of the range.
     LastMatch,
-    /// Allocate a memory slot starting with the specified addrress
+    /// Allocate a memory slot starting with the specified address
     /// if it is available.
     ExactMatch(u64),
 }
