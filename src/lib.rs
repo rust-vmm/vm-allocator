@@ -34,4 +34,4 @@ pub enum Error {
 }
 
 /// Wrapper over std::result::Result
-pub type Result = result::Result<u32, Error>;
+pub type Result<T> = result::Result<T, Error>;
