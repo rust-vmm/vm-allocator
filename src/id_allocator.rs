@@ -35,7 +35,7 @@ impl IdAllocator {
     /// `range_base` and `range_end`
     pub fn new(range_base: u32, range_end: u32) -> std::result::Result<Self, Error> {
         if range_end < range_base {
-            return Err(Error::InvalidRange(range_base, range_end));
+            return Err(Error::InvalidRange(range_base.into(), range_end.into()));
         }
         Ok(IdAllocator {
             range_base,
@@ -53,7 +53,7 @@ impl IdAllocator {
     /// Allocate an ID from the managed ranged.
     /// We first try to reuse one of the IDs released before. If there is no
     /// ID to reuse we return the next available one from the managed range.
-    pub fn allocate_id(&mut self) -> Result {
+    pub fn allocate_id(&mut self) -> Result<u32> {
         // If the set containing all freed ids is not empty we extract the
         // first entry from that set and return it.
         if !self.freed_ids.is_empty() {
@@ -76,7 +76,7 @@ impl IdAllocator {
     }
 
     /// Frees an id from the managed range.
-    pub fn free_id(&mut self, id: u32) -> Result {
+    pub fn free_id(&mut self, id: u32) -> Result<u32> {
         // Check if the id belongs to the managed range and if it was not
         // released before. Return error if any of the conditions is not met.
         if !self.id_in_range(id) {
