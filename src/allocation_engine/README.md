@@ -53,7 +53,7 @@ constraint.
 At the beginning, the interval tree will contain just one node that will represent
 the whole address space, the state of this node will be `NodeState::Free`.
 
-![InteralTree creation example](/images/first_node.png)
+![IntervalTree creation example](/images/first_node.png)
 
 When we allocate a memory slot, one of the nodes that have the state `NodeState::Free`
 will be split accordingly. A new node that has as the key a range representing the
@@ -66,6 +66,57 @@ to `NodeState::Free` if there are two adjacent nodes that are not allocated then
 they will be merged in a single node.
 
 ![Node Freeing example](/images/after_free.png)
+
+## Address aligning
+
+Memory slots allocated using address allocator can have the start aligned to a
+specified value. We offer the possibility to align the starting address either to
+the next boundary or the previous one.
+
+If the allocation policy used is `AllocPolicy::FirstMatch` all memory slots will
+start at an address aligned to the first multiple of specified alignment value
+that is greater or equal to the candidate address.
+
+Example:
+
+```text
+initial_address              = 0b0..01000000000000000000000000000001
+alignment                    = 0b0..00000000000000000001000000000000
+initial_addr + alignment - 1 = 0b0..01000000000000000001000000000000
+!(alignment - 1)             = 0b1..11111111111111111111000000000000
+```
+
+The aligned address will be the result of bitwise AND between `initial address + alignment - 1` and
+bitwise NOT of `alignment - 1`.
+
+```text
+0b0..01000000000000000000000000000001(0x0000000040001000)&
+0b1..11111111111111111111000000000000(0xFFFFFFFFFFFFF000)
+-------------------------------------------------------------------
+0b0..01000000000000000001000000000000(0x0000000040001000)
+```
+
+If the allocation policy used is `AllocPolicy::LastMatch` all memory slots will
+start at an address aligned to the first multiple of specified alignment value
+that is lower or equal to the candidate address.
+
+Example:
+
+```text
+initial_address  = 0b0..01000000000000000000000000000001
+alignment        = 0b0..00000000000000000001000000000000
+!(alignment - 1) = 0b1..11111111111111111111000000000000
+```
+
+The aligned address will be the result of bitwise AND between `initial address` and
+bitwise NOT of `alignment - 1`.
+
+```text
+0b0..01000000000000000000000000000001(0x0000000040000001)&
+0b1..11111111111111111111000000000000(0xFFFFFFFFFFFFF000)
+-------------------------------------------------------------------
+0b0..01000000000000000000000000000000(0x0000000040000000)
+```
 
 ## License
 
