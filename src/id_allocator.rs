@@ -19,7 +19,7 @@ use std::collections::BTreeSet;
 /// are sorted so we will always use the first available ID.
 #[derive(Debug)]
 pub struct IdAllocator {
-    // Beginnbing of the range of IDs that we want to manage.
+    // Beginning of the range of IDs that we want to manage.
     range_base: u32,
     // First available id that was never allocated.
     next_id: Option<u32>,
@@ -173,8 +173,8 @@ mod tests {
     fn test_id_sanity_checks() {
         let legacy_irq_allocator = IdAllocator::new(5, 23).unwrap();
 
-        assert_eq!(legacy_irq_allocator.id_in_range(4), false);
-        assert_eq!(legacy_irq_allocator.id_in_range(6), true);
-        assert_eq!(legacy_irq_allocator.id_in_range(25), false);
+        assert!(!legacy_irq_allocator.id_in_range(4));
+        assert!(legacy_irq_allocator.id_in_range(6));
+        assert!(!legacy_irq_allocator.id_in_range(25));
     }
 }
