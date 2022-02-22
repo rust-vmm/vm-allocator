@@ -199,6 +199,36 @@ impl InnerNode {
             height: 1,
         }
     }
+
+    /// Returns a readonly reference to the node associated with the `key` or
+    /// None if the searched key does not exist in the tree.
+    #[allow(dead_code)]
+    fn search(&self, key: &Range) -> Option<&InnerNode> {
+        match self.key.cmp(key) {
+            Ordering::Equal => Some(self),
+            Ordering::Less => self.right.as_ref().and_then(|node| node.search(key)),
+            Ordering::Greater => self.left.as_ref().and_then(|node| node.search(key)),
+        }
+    }
+
+    /// Returns a readonly reference to the node associated with the `key` or
+    /// None if there is no Node representing an interval that covers the
+    /// searched key. For a key [a, b], this method will return a node with
+    /// a key [c, d] such that c <= a and b <= d.
+    #[allow(dead_code)]
+    fn search_superset(&self, key: &Range) -> Option<&InnerNode> {
+        if self.key.contains(key) {
+            Some(self)
+        } else if key.end < self.key.start {
+            self.left
+                .as_ref()
+                .and_then(|node| node.search_superset(key))
+        } else {
+            self.right
+                .as_ref()
+                .and_then(|node| node.search_superset(key))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -297,5 +327,63 @@ mod tests {
         assert!(!ns.is_free());
         ns = NodeState::Free;
         assert!(ns.is_free());
+    }
+
+    #[test]
+    fn test_search() {
+        let left_child = InnerNode::new(Range::new(0x90, 0x99).unwrap(), NodeState::Free);
+        let right_child = InnerNode::new(Range::new(0x200, 0x2ff).unwrap(), NodeState::Free);
+        let mut root_node = InnerNode::new(Range::new(0x100, 0x110).unwrap(), NodeState::Allocated);
+        root_node.left = Some(Box::new(left_child.clone()));
+        root_node.right = Some(Box::new(right_child));
+
+        assert_eq!(
+            root_node.search(&Range::new(0x90, 0x99).unwrap()),
+            Some(&left_child)
+        );
+        assert_eq!(root_node.search(&Range::new(0x200, 0x250).unwrap()), None);
+        assert_eq!(root_node.search(&Range::new(0x111, 0x1fe).unwrap()), None);
+    }
+
+    #[test]
+    fn test_search_superset() {
+        let left_child = InnerNode::new(Range::new(0x90, 0x99).unwrap(), NodeState::Free);
+        let right_child = InnerNode::new(Range::new(0x200, 0x2ff).unwrap(), NodeState::Free);
+        let mut root_node = InnerNode::new(Range::new(0x100, 0x110).unwrap(), NodeState::Allocated);
+        root_node.left = Some(Box::new(left_child));
+        root_node.right = Some(Box::new(right_child.clone()));
+
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x100, 0x100).unwrap()),
+            Some(&root_node)
+        );
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x200, 0x201).unwrap()),
+            Some(&right_child)
+        );
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x200, 0x2ff).unwrap()),
+            Some(&right_child)
+        );
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x210, 0x210).unwrap()),
+            Some(&right_child)
+        );
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x2ff, 0x2ff).unwrap()),
+            Some(&right_child)
+        );
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x2ff, 0x300).unwrap()),
+            None
+        );
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x300, 0x300).unwrap()),
+            None
+        );
+        assert_eq!(
+            root_node.search_superset(&Range::new(0x1ff, 0x300).unwrap()),
+            None
+        );
     }
 }
