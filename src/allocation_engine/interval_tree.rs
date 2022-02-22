@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2
 
 use crate::{Error, Result};
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 
 /// Policy for resource allocation.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -173,8 +173,8 @@ impl NodeState {
 }
 
 /// Internal tree node to implement interval tree.
-#[derive(Debug, PartialEq)]
-struct InnerNode {
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+pub struct InnerNode {
     /// Interval handled by this node.
     key: Range,
     /// NodeState, can be Free or Allocated.
@@ -185,8 +185,20 @@ struct InnerNode {
     right: Option<Box<InnerNode>>,
     /// Cached height of the node.
     height: u64,
-    /// Cached maximum valued covered by this node.
-    max_key: u64,
+}
+
+impl InnerNode {
+    /// Creates a new InnerNode object.
+    #[allow(dead_code)]
+    fn new(key: Range, node_state: NodeState) -> Self {
+        InnerNode {
+            key,
+            node_state,
+            left: None,
+            right: None,
+            height: 1,
+        }
+    }
 }
 
 #[cfg(test)]
