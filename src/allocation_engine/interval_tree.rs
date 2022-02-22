@@ -229,6 +229,142 @@ impl InnerNode {
                 .and_then(|node| node.search_superset(key))
         }
     }
+
+    /// Rotates the tree such that height difference between subtrees
+    /// is not greater than abs(1).
+    #[allow(dead_code)]
+    fn rotate(self: Box<Self>) -> Box<Self> {
+        let l = height(&self.left);
+        let r = height(&self.right);
+
+        match (l as i64) - (r as i64) {
+            1 | 0 | -1 => self,
+            // Safe to unwrap as rotate_left_successor always returns Some when
+            // the current node has a left child and we just checked that it
+            // has at least one child otherwise this difference would not be two.
+            2 => self.rotate_left_successor().unwrap(),
+            // Safe to unwrap as rotate_right_successor always returns Some when
+            // the current node has a right child and we just checked that it
+            // has at least one child otherwise this difference would not be
+            // minus two.
+            -2 => self.rotate_right_successor().unwrap(),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Performs a single left rotation on this node.
+    #[allow(dead_code)]
+    fn rotate_left(mut self: Box<Self>) -> Option<Box<Self>> {
+        if let Some(mut new_root) = self.right.take() {
+            self.right = new_root.left.take();
+            self.update_cached_height();
+            new_root.left = Some(self);
+            new_root.update_cached_height();
+            return Some(new_root);
+        }
+        None
+    }
+
+    /// Performs a single right rotation on this node.
+    #[allow(dead_code)]
+    fn rotate_right(mut self: Box<Self>) -> Option<Box<Self>> {
+        if let Some(mut new_root) = self.left.take() {
+            self.left = new_root.right.take();
+            self.update_cached_height();
+            new_root.right = Some(self);
+            new_root.update_cached_height();
+            return Some(new_root);
+        }
+        None
+    }
+
+    /// Performs a rotation when the left successor is too high.
+    #[allow(dead_code)]
+    fn rotate_left_successor(mut self: Box<Self>) -> Option<Box<Self>> {
+        if let Some(left) = self.left.take() {
+            if height(&left.left) < height(&left.right) {
+                self.left = left.rotate_left();
+                self.update_cached_height();
+            } else {
+                self.left = Some(left);
+            }
+            return self.rotate_right();
+        }
+        None
+    }
+
+    /// Performs a rotation when the right successor is too high.
+    #[allow(dead_code)]
+    fn rotate_right_successor(mut self: Box<Self>) -> Option<Box<Self>> {
+        if let Some(right) = self.right.take() {
+            if height(&right.left) > height(&right.right) {
+                self.right = right.rotate_right();
+                self.update_cached_height();
+            } else {
+                self.right = Some(right);
+            }
+            return self.rotate_left();
+        }
+        None
+    }
+
+    /// Deletes the entry point of this tree structure.
+    #[allow(dead_code)]
+    fn delete_root(mut self) -> Option<Box<Self>> {
+        match (self.left.take(), self.right.take()) {
+            (None, None) => None,
+            (Some(l), None) => Some(l),
+            (None, Some(r)) => Some(r),
+            (Some(l), Some(r)) => Some(Self::combine_subtrees(l, r)),
+        }
+    }
+
+    /// Finds the minimal key below the tree and returns a new optional tree
+    /// where the minimal value has been removed and the (optional) minimal node
+    /// as tuple (min_node, remaining).
+    #[allow(dead_code)]
+    fn get_new_root(mut self: Box<Self>) -> (Box<Self>, Option<Box<Self>>) {
+        match self.left.take() {
+            None => {
+                let remaining = self.right.take();
+                (self, remaining)
+            }
+            Some(left) => {
+                let (min_node, left) = left.get_new_root();
+                self.left = left;
+                (min_node, Some(self.update_node()))
+            }
+        }
+    }
+
+    /// Creates a single tree from the subtrees resulted from deleting the root
+    /// node.
+    #[allow(dead_code)]
+    fn combine_subtrees(l: Box<Self>, r: Box<Self>) -> Box<Self> {
+        let (mut new_root, remaining) = r.get_new_root();
+        new_root.left = Some(l);
+        new_root.right = remaining;
+        new_root.update_node()
+    }
+
+    /// Updates cached information of the node.
+    #[allow(dead_code)]
+    fn update_cached_height(&mut self) {
+        self.height = max(height(&self.left), height(&self.right)) + 1;
+    }
+
+    /// Updates the sub-tree to keep balance.
+    #[allow(dead_code)]
+    fn update_node(mut self: Box<Self>) -> Box<Self> {
+        self.update_cached_height();
+        self.rotate()
+    }
+}
+
+/// Compute height of the optional sub-tree.
+#[allow(dead_code)]
+fn height(node: &Option<Box<InnerNode>>) -> u64 {
+    node.as_ref().map_or(0, |n| n.height)
 }
 
 #[cfg(test)]
@@ -384,6 +520,118 @@ mod tests {
         assert_eq!(
             root_node.search_superset(&Range::new(0x1ff, 0x300).unwrap()),
             None
+        );
+    }
+
+    #[test]
+    fn test_delete_root_balance_right() {
+        // This test is just to prove the correctness of rotate_*_successor
+        // methods. This will be deleted after the insert/delete methods are
+        // added.
+        let mut unbalanced_tree =
+            InnerNode::new(Range::new(0x300, 0x310).unwrap(), NodeState::Free);
+        let mut right_node1 = InnerNode::new(Range::new(0x311, 0x313).unwrap(), NodeState::Free);
+        let mut right_node2 = InnerNode::new(Range::new(0x314, 0x316).unwrap(), NodeState::Free);
+        let mut right_node3 = InnerNode::new(Range::new(0x317, 0x319).unwrap(), NodeState::Free);
+        let right_node4 = InnerNode::new(Range::new(0x321, 0x324).unwrap(), NodeState::Free);
+        let left_node1 = InnerNode::new(Range::new(0x100, 0x110).unwrap(), NodeState::Free);
+
+        unbalanced_tree.height = 5;
+        right_node1.height = 4;
+        right_node2.height = 3;
+        right_node3.height = 2;
+
+        right_node3.right = Some(Box::new(right_node4));
+        right_node2.right = Some(Box::new(right_node3));
+        right_node1.right = Some(Box::new(right_node2));
+        unbalanced_tree.left = Some(Box::new(left_node1));
+        unbalanced_tree.right = Some(Box::new(right_node1));
+        let balanced_tree = *unbalanced_tree.delete_root().unwrap();
+
+        // Check that the tree remains balanced after the root is deleted.
+        // This test manually verifies that the structure of the tree is the
+        // expected one after a node is deleted. This test will be deleted
+        // and a method to check that a tree is balanced will be implemented
+        // when the insert/delete methods are added.
+        assert_eq!(balanced_tree.key, Range::new(0x314, 0x316).unwrap());
+        assert_eq!(
+            balanced_tree.clone().left.unwrap().as_ref().key,
+            Range::new(0x311, 0x313).unwrap()
+        );
+        assert_eq!(
+            balanced_tree
+                .clone()
+                .left
+                .unwrap()
+                .left
+                .unwrap()
+                .as_ref()
+                .key,
+            Range::new(0x100, 0x110).unwrap()
+        );
+
+        assert_eq!(
+            balanced_tree.clone().right.unwrap().as_ref().key,
+            Range::new(0x317, 0x319).unwrap()
+        );
+        assert_eq!(
+            balanced_tree.right.unwrap().right.unwrap().as_ref().key,
+            Range::new(0x321, 0x324).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_delete_root_balance_left() {
+        // This test is just to prove the correctness of rotate_*_successor
+        // methods. This will be deleted after the insert/delete methods are
+        // added.
+        let mut balanced_tree = InnerNode::new(Range::new(0x300, 0x310).unwrap(), NodeState::Free);
+        let mut right_node1 = InnerNode::new(Range::new(0x311, 0x312).unwrap(), NodeState::Free);
+        let mut left_node1 = InnerNode::new(Range::new(0x280, 0x290).unwrap(), NodeState::Free);
+        let mut left_node2 = InnerNode::new(Range::new(0x270, 0x279).unwrap(), NodeState::Free);
+        let left_node3 = InnerNode::new(Range::new(0x260, 0x269).unwrap(), NodeState::Free);
+        let right_node2 = InnerNode::new(Range::new(0x313, 0x315).unwrap(), NodeState::Free);
+
+        balanced_tree.height = 4;
+        left_node1.height = 3;
+        left_node2.height = 2;
+        right_node1.height = 2;
+
+        left_node2.left = Some(Box::new(left_node3));
+        left_node1.left = Some(Box::new(left_node2));
+        right_node1.right = Some(Box::new(right_node2));
+        balanced_tree.left = Some(Box::new(left_node1));
+        balanced_tree.right = Some(Box::new(right_node1));
+        balanced_tree = *balanced_tree.delete_root().unwrap();
+
+        // Check that the tree remains balanced after the root is deleted.
+        // This test manually verifies that the structure of the tree is the
+        // expected one after a node is deleted. This test will be deleted
+        // and a method to check that a tree is balanced will be implemented
+        // when the insert/delete methods are added.
+        assert_eq!(balanced_tree.key, Range::new(0x280, 0x290).unwrap());
+        assert_eq!(
+            balanced_tree.clone().left.unwrap().as_ref().key,
+            Range::new(0x270, 0x279).unwrap()
+        );
+        assert_eq!(
+            balanced_tree
+                .clone()
+                .left
+                .unwrap()
+                .left
+                .unwrap()
+                .as_ref()
+                .key,
+            Range::new(0x260, 0x269).unwrap()
+        );
+        assert_eq!(
+            balanced_tree.clone().right.unwrap().as_ref().key,
+            Range::new(0x311, 0x312).unwrap()
+        );
+        assert_eq!(
+            balanced_tree.right.unwrap().right.unwrap().as_ref().key,
+            Range::new(0x313, 0x315).unwrap()
         );
     }
 }
