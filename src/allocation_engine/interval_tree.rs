@@ -426,6 +426,36 @@ impl InnerNode {
             },
         }
     }
+
+    /// Delete `key` from the subtree.
+    ///
+    /// Note: it doesn't return whether the key exists in the subtree, so caller
+    /// need to ensure the logic.
+    #[allow(dead_code)]
+    pub(crate) fn delete(mut self: Box<Self>, key: &Range) -> Option<Box<Self>> {
+        match self.key.cmp(key) {
+            Ordering::Equal => {
+                return self.delete_root();
+            }
+            Ordering::Less => {
+                if let Some(node) = self.right.take() {
+                    let right = node.delete(key);
+                    self.right = right;
+                    self.update_cached_height();
+                    return Some(self.rotate());
+                }
+            }
+            Ordering::Greater => {
+                if let Some(node) = self.left.take() {
+                    let left = node.delete(key);
+                    self.left = left;
+                    self.update_cached_height();
+                    return Some(self.rotate());
+                }
+            }
+        }
+        Some(self)
+    }
 }
 
 /// Compute height of the optional sub-tree.
@@ -648,7 +678,21 @@ mod tests {
         tree = tree
             .insert(Range::new(0x321, 0x323).unwrap(), NodeState::Free)
             .unwrap();
-        assert!(is_balanced(Some(tree)));
+        assert!(is_balanced(Some(tree.clone())));
+
+        tree = tree.delete(&Range::new(0x321, 0x323).unwrap()).unwrap();
+        tree = tree.delete(&Range::new(0x314, 0x316).unwrap()).unwrap();
+        tree = tree.delete(&Range::new(0x317, 0x319).unwrap()).unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        tree = tree
+            .insert(Range::new(0x80, 0x8F).unwrap(), NodeState::Free)
+            .unwrap();
+        tree = tree
+            .insert(Range::new(0x70, 0x7F).unwrap(), NodeState::Free)
+            .unwrap();
+        let _ = tree
+            .insert(Range::new(0x60, 0x6F).unwrap(), NodeState::Free)
+            .unwrap();
     }
 
     #[test]
@@ -739,6 +783,40 @@ mod tests {
         assert_eq!(
             *tree.search(&range2).unwrap(),
             InnerNode::new(range2, NodeState::Allocated)
+        );
+    }
+
+    #[test]
+    fn test_tree_delete() {
+        let left_child = InnerNode::new(Range::new(0x100, 0x110).unwrap(), NodeState::Free);
+        let right_child = InnerNode::new(Range::new(0x300, 0x3FF).unwrap(), NodeState::Free);
+        let mut tree = Box::new(InnerNode::new(
+            Range::new(0x200, 0x290).unwrap(),
+            NodeState::Free,
+        ));
+        tree = tree
+            .insert(right_child.key, right_child.node_state)
+            .unwrap();
+        tree = tree.delete(&Range::new(0x200, 0x290).unwrap()).unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        tree = tree
+            .insert(Range::new(0x200, 0x290).unwrap(), NodeState::Free)
+            .unwrap();
+        tree = tree.insert(left_child.key, left_child.node_state).unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+
+        assert_eq!(
+            *tree.search(&Range::new(0x100, 0x110).unwrap()).unwrap(),
+            left_child
+        );
+        assert_eq!(*tree.search(&right_child.key).unwrap(), right_child);
+
+        tree = tree.delete(&Range::new(0x200, 0x290).unwrap()).unwrap();
+        tree = tree.delete(&Range::new(0x300, 0x3FF).unwrap()).unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        assert_eq!(
+            *tree.search(&Range::new(0x100, 0x110).unwrap()).unwrap(),
+            left_child
         );
     }
 }
