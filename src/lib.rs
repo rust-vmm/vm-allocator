@@ -27,9 +27,9 @@ pub enum Error {
     /// An id  that was never allocated was requested to be released.
     #[error("Specified id: {0} was never allocated, can't release it.")]
     NeverAllocated(u32),
-    /// There are no more IDs available in the manage range
+    /// The resource we want to use or update is not available.
     #[error("The requested resource is not available.")]
-    ResourceExhausted,
+    ResourceNotAvailable,
     /// The range to manage is invalid.
     #[error("The range specified: {0}-{1} is not valid.")]
     InvalidRange(u64, u64),
@@ -40,6 +40,10 @@ pub enum Error {
     /// with another node from the tree.
     #[error("Addresses are overlapping.{0:?} intersects with existing {1:?}")]
     Overlap(allocation_engine::Range, allocation_engine::Range),
+    /// A node state can be changed just from Free to Allocated, other transitions
+    /// are not valid.
+    #[error("Invalid state transition for node {0:?} from {1:?} to NodeState::Free")]
+    InvalidStateTransition(allocation_engine::Range, allocation_engine::NodeState),
 }
 
 /// Wrapper over std::result::Result

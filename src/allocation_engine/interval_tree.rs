@@ -401,6 +401,31 @@ impl InnerNode {
         self.update_cached_height();
         Ok(self.rotate())
     }
+
+    /// Update the state of an old node. This method should be used when we
+    /// find an existing node with the state `NodeState::Free` that satisfies
+    /// all constraints of an allocation request. The recursion is safe as we
+    /// have in place a maximum height for the tree.
+    #[allow(dead_code)]
+    pub(crate) fn mark_as_allocated(&mut self, key: &Range) -> Result<()> {
+        match self.key.cmp(key) {
+            Ordering::Equal => {
+                if self.node_state != NodeState::Free {
+                    return Err(Error::InvalidStateTransition(self.key, self.node_state));
+                }
+                self.node_state = NodeState::Allocated;
+                Ok(())
+            }
+            Ordering::Less => match self.right.as_mut() {
+                None => Err(Error::ResourceNotAvailable),
+                Some(node) => node.mark_as_allocated(key),
+            },
+            Ordering::Greater => match self.left.as_mut() {
+                None => Err(Error::ResourceNotAvailable),
+                Some(node) => node.mark_as_allocated(key),
+            },
+        }
+    }
 }
 
 /// Compute height of the optional sub-tree.
@@ -676,5 +701,44 @@ mod tests {
         let tree = Box::new(inner_node);
         let res = tree.insert(Range::new(0x100, 0x200).unwrap(), NodeState::Free);
         assert_eq!(res.unwrap_err(), Error::Overflow);
+    }
+
+    #[test]
+    fn test_tree_mark_as_allocated_invalid_transition() {
+        let range = Range::new(0x100, 0x110).unwrap();
+        let mut tree = Box::new(InnerNode::new(range, NodeState::Allocated));
+        assert_eq!(
+            tree.mark_as_allocated(&range).unwrap_err(),
+            Error::InvalidStateTransition(range, NodeState::Allocated)
+        );
+    }
+
+    #[test]
+    fn test_tree_mark_as_allocated_resource_not_available() {
+        let range = Range::new(0x100, 0x110).unwrap();
+        let mut tree = Box::new(InnerNode::new(range, NodeState::Allocated));
+        assert_eq!(
+            tree.mark_as_allocated(&Range::new(0x111, 0x112).unwrap())
+                .unwrap_err(),
+            Error::ResourceNotAvailable
+        );
+        assert_eq!(
+            tree.mark_as_allocated(&Range::new(0x90, 0x92).unwrap())
+                .unwrap_err(),
+            Error::ResourceNotAvailable
+        );
+    }
+
+    #[test]
+    fn test_tree_mark_as_allocated() {
+        let range = Range::new(0x100, 0x110).unwrap();
+        let range2 = Range::new(0x200, 0x2FF).unwrap();
+        let mut tree = Box::new(InnerNode::new(range, NodeState::Allocated));
+        tree = tree.insert(range2, NodeState::Free).unwrap();
+        assert!(tree.mark_as_allocated(&range2).is_ok());
+        assert_eq!(
+            *tree.search(&range2).unwrap(),
+            InnerNode::new(range2, NodeState::Allocated)
+        );
     }
 }
