@@ -332,7 +332,8 @@ impl InnerNode {
             Some(left) => {
                 let (min_node, left) = left.get_new_root();
                 self.left = left;
-                (min_node, Some(self.update_node()))
+                self.update_cached_height();
+                (min_node, Some(self.rotate()))
             }
         }
     }
@@ -344,7 +345,8 @@ impl InnerNode {
         let (mut new_root, remaining) = r.get_new_root();
         new_root.left = Some(l);
         new_root.right = remaining;
-        new_root.update_node()
+        new_root.update_cached_height();
+        new_root.rotate()
     }
 
     /// Updates cached information of the node.
@@ -353,11 +355,51 @@ impl InnerNode {
         self.height = max(height(&self.left), height(&self.right)) + 1;
     }
 
-    /// Updates the sub-tree to keep balance.
+    /// Insert a new node in the subtree. After the node is inserted the
+    /// tree will be balanced. The node_state parameter is needed because in
+    /// the AddressAllocator allocation logic we will need to insert both free
+    /// and allocated nodes.
     #[allow(dead_code)]
-    fn update_node(mut self: Box<Self>) -> Box<Self> {
+    pub(crate) fn insert(
+        mut self: Box<Self>,
+        key: Range,
+        node_state: NodeState,
+    ) -> Result<Box<Self>> {
+        // The InnerNode structure has 48 a length of 48 bytes. With other nested
+        // calls that are made during the insertion process the size occupied
+        // on the stack by just one insert call is around 122 bytes. Considering
+        // that the default stack size on Linux is 8K we could make around 73
+        // calls to insert method before confronting with an stack overflow. To
+        // be cautious we will use 50 as the maximum height of the tree. A
+        // maximum height of 50 will result in the possibility to allocate
+        // (2^50 - 1) memory slots. Considering the imposed maximum height the
+        // recursion is safe to use.
+        if (self.height + 1) > 50 {
+            return Err(Error::Overflow);
+        }
+        if self.key.overlaps(&key) {
+            return Err(Error::Overlap(key, self.key));
+        }
+        match self.key.cmp(&key) {
+            // It is not possible for a range to be equal with an existing node
+            // as the overlaps method will also catch this case and return the
+            // corresponding error code.
+            Ordering::Equal => unreachable!(),
+            Ordering::Less => match self.right {
+                None => self.right = Some(Box::new(InnerNode::new(key, node_state))),
+                Some(right) => {
+                    self.right = Some(right.insert(key, node_state)?);
+                }
+            },
+            Ordering::Greater => match self.left {
+                None => self.left = Some(Box::new(InnerNode::new(key, node_state))),
+                Some(left) => {
+                    self.left = Some(left.insert(key, node_state)?);
+                }
+            },
+        }
         self.update_cached_height();
-        self.rotate()
+        Ok(self.rotate())
     }
 }
 
@@ -467,171 +509,172 @@ mod tests {
 
     #[test]
     fn test_search() {
+        let mut tree = Box::new(InnerNode::new(
+            Range::new(0x100, 0x110).unwrap(),
+            NodeState::Allocated,
+        ));
         let left_child = InnerNode::new(Range::new(0x90, 0x99).unwrap(), NodeState::Free);
-        let right_child = InnerNode::new(Range::new(0x200, 0x2ff).unwrap(), NodeState::Free);
-        let mut root_node = InnerNode::new(Range::new(0x100, 0x110).unwrap(), NodeState::Allocated);
-        root_node.left = Some(Box::new(left_child.clone()));
-        root_node.right = Some(Box::new(right_child));
+
+        tree = tree.insert(left_child.key, left_child.node_state).unwrap();
+        tree = tree
+            .insert(Range::new(0x200, 0x2FF).unwrap(), NodeState::Free)
+            .unwrap();
 
         assert_eq!(
-            root_node.search(&Range::new(0x90, 0x99).unwrap()),
+            tree.search(&Range::new(0x90, 0x99).unwrap()),
             Some(&left_child)
         );
-        assert_eq!(root_node.search(&Range::new(0x200, 0x250).unwrap()), None);
-        assert_eq!(root_node.search(&Range::new(0x111, 0x1fe).unwrap()), None);
+        assert_eq!(tree.search(&Range::new(0x200, 0x250).unwrap()), None);
+        assert_eq!(tree.search(&Range::new(0x111, 0x1fe).unwrap()), None);
     }
 
     #[test]
     fn test_search_superset() {
-        let left_child = InnerNode::new(Range::new(0x90, 0x99).unwrap(), NodeState::Free);
-        let right_child = InnerNode::new(Range::new(0x200, 0x2ff).unwrap(), NodeState::Free);
-        let mut root_node = InnerNode::new(Range::new(0x100, 0x110).unwrap(), NodeState::Allocated);
-        root_node.left = Some(Box::new(left_child));
-        root_node.right = Some(Box::new(right_child.clone()));
+        let mut tree = Box::new(InnerNode::new(
+            Range::new(0x100, 0x110).unwrap(),
+            NodeState::Allocated,
+        ));
+        let right_child = InnerNode::new(Range::new(0x200, 0x2FF).unwrap(), NodeState::Free);
+        let left_child = InnerNode::new(Range::new(0x90, 0x9F).unwrap(), NodeState::Free);
+
+        tree = tree.insert(left_child.key, left_child.node_state).unwrap();
+        tree = tree
+            .insert(right_child.key, right_child.node_state)
+            .unwrap();
 
         assert_eq!(
-            root_node.search_superset(&Range::new(0x100, 0x100).unwrap()),
-            Some(&root_node)
+            tree.search_superset(&Range::new(0x100, 0x100).unwrap()),
+            Some(&(*tree))
         );
         assert_eq!(
-            root_node.search_superset(&Range::new(0x200, 0x201).unwrap()),
+            tree.search_superset(&Range::new(0x90, 0x95).unwrap()),
+            Some(&left_child)
+        );
+        assert_eq!(
+            tree.search_superset(&Range::new(0x200, 0x201).unwrap()),
             Some(&right_child)
         );
         assert_eq!(
-            root_node.search_superset(&Range::new(0x200, 0x2ff).unwrap()),
+            tree.search_superset(&Range::new(0x200, 0x2FF).unwrap()),
             Some(&right_child)
         );
         assert_eq!(
-            root_node.search_superset(&Range::new(0x210, 0x210).unwrap()),
+            tree.search_superset(&Range::new(0x210, 0x210).unwrap()),
             Some(&right_child)
         );
         assert_eq!(
-            root_node.search_superset(&Range::new(0x2ff, 0x2ff).unwrap()),
+            tree.search_superset(&Range::new(0x2FF, 0x2FF).unwrap()),
             Some(&right_child)
         );
         assert_eq!(
-            root_node.search_superset(&Range::new(0x2ff, 0x300).unwrap()),
+            tree.search_superset(&Range::new(0x2FF, 0x300).unwrap()),
             None
         );
         assert_eq!(
-            root_node.search_superset(&Range::new(0x300, 0x300).unwrap()),
+            tree.search_superset(&Range::new(0x300, 0x300).unwrap()),
             None
         );
         assert_eq!(
-            root_node.search_superset(&Range::new(0x1ff, 0x300).unwrap()),
+            tree.search_superset(&Range::new(0x1ff, 0x300).unwrap()),
             None
         );
     }
 
+    fn is_balanced(tree: Option<Box<InnerNode>>) -> bool {
+        if tree.is_none() {
+            return true;
+        }
+        let left_height = height(&tree.as_ref().unwrap().left.clone());
+        let right_height = height(&tree.as_ref().unwrap().right.clone());
+        if (left_height as i64 - right_height as i64).abs() <= 1
+            && is_balanced(tree.as_ref().unwrap().left.clone())
+            && is_balanced(tree.as_ref().unwrap().right.clone())
+        {
+            return true;
+        }
+        false
+    }
+
     #[test]
-    fn test_delete_root_balance_right() {
-        // This test is just to prove the correctness of rotate_*_successor
-        // methods. This will be deleted after the insert/delete methods are
-        // added.
-        let mut unbalanced_tree =
-            InnerNode::new(Range::new(0x300, 0x310).unwrap(), NodeState::Free);
-        let mut right_node1 = InnerNode::new(Range::new(0x311, 0x313).unwrap(), NodeState::Free);
-        let mut right_node2 = InnerNode::new(Range::new(0x314, 0x316).unwrap(), NodeState::Free);
-        let mut right_node3 = InnerNode::new(Range::new(0x317, 0x319).unwrap(), NodeState::Free);
-        let right_node4 = InnerNode::new(Range::new(0x321, 0x324).unwrap(), NodeState::Free);
-        let left_node1 = InnerNode::new(Range::new(0x100, 0x110).unwrap(), NodeState::Free);
+    fn test_tree_insert_balanced() {
+        let mut tree = Box::new(InnerNode::new(
+            Range::new(0x300, 0x310).unwrap(),
+            NodeState::Allocated,
+        ));
+        tree = tree
+            .insert(Range::new(0x100, 0x110).unwrap(), NodeState::Free)
+            .unwrap();
+        tree = tree
+            .insert(Range::new(0x90, 0x9F).unwrap(), NodeState::Free)
+            .unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        tree = tree
+            .insert(Range::new(0x311, 0x313).unwrap(), NodeState::Free)
+            .unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        tree = tree
+            .insert(Range::new(0x314, 0x316).unwrap(), NodeState::Free)
+            .unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        tree = tree
+            .insert(Range::new(0x317, 0x319).unwrap(), NodeState::Free)
+            .unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        tree = tree
+            .insert(Range::new(0x321, 0x323).unwrap(), NodeState::Free)
+            .unwrap();
+        assert!(is_balanced(Some(tree)));
+    }
 
-        unbalanced_tree.height = 5;
-        right_node1.height = 4;
-        right_node2.height = 3;
-        right_node3.height = 2;
-
-        right_node3.right = Some(Box::new(right_node4));
-        right_node2.right = Some(Box::new(right_node3));
-        right_node1.right = Some(Box::new(right_node2));
-        unbalanced_tree.left = Some(Box::new(left_node1));
-        unbalanced_tree.right = Some(Box::new(right_node1));
-        let balanced_tree = *unbalanced_tree.delete_root().unwrap();
-
-        // Check that the tree remains balanced after the root is deleted.
-        // This test manually verifies that the structure of the tree is the
-        // expected one after a node is deleted. This test will be deleted
-        // and a method to check that a tree is balanced will be implemented
-        // when the insert/delete methods are added.
-        assert_eq!(balanced_tree.key, Range::new(0x314, 0x316).unwrap());
+    #[test]
+    fn test_tree_insert_intersect_negative() {
+        let mut tree = Box::new(InnerNode::new(
+            Range::new(0x100, 0x200).unwrap(),
+            NodeState::Allocated,
+        ));
+        tree = tree
+            .insert(Range::new(0x201, 0x2FF).unwrap(), NodeState::Free)
+            .unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        let res = tree
+            .clone()
+            .insert(Range::new(0x201, 0x2FE).unwrap(), NodeState::Free);
         assert_eq!(
-            balanced_tree.clone().left.unwrap().as_ref().key,
-            Range::new(0x311, 0x313).unwrap()
+            res.unwrap_err(),
+            Error::Overlap(
+                Range::new(0x201, 0x2FE).unwrap(),
+                Range::new(0x201, 0x2FF).unwrap()
+            )
         );
+        tree = tree
+            .insert(Range::new(0x90, 0x9F).unwrap(), NodeState::Free)
+            .unwrap();
+        assert!(is_balanced(Some(tree.clone())));
+        let res = tree.insert(Range::new(0x90, 0x9E).unwrap(), NodeState::Free);
         assert_eq!(
-            balanced_tree
-                .clone()
-                .left
-                .unwrap()
-                .left
-                .unwrap()
-                .as_ref()
-                .key,
-            Range::new(0x100, 0x110).unwrap()
-        );
-
-        assert_eq!(
-            balanced_tree.clone().right.unwrap().as_ref().key,
-            Range::new(0x317, 0x319).unwrap()
-        );
-        assert_eq!(
-            balanced_tree.right.unwrap().right.unwrap().as_ref().key,
-            Range::new(0x321, 0x324).unwrap()
+            res.unwrap_err(),
+            Error::Overlap(
+                Range::new(0x90, 0x9E).unwrap(),
+                Range::new(0x90, 0x9F).unwrap()
+            )
         );
     }
 
     #[test]
-    fn test_delete_root_balance_left() {
-        // This test is just to prove the correctness of rotate_*_successor
-        // methods. This will be deleted after the insert/delete methods are
-        // added.
-        let mut balanced_tree = InnerNode::new(Range::new(0x300, 0x310).unwrap(), NodeState::Free);
-        let mut right_node1 = InnerNode::new(Range::new(0x311, 0x312).unwrap(), NodeState::Free);
-        let mut left_node1 = InnerNode::new(Range::new(0x280, 0x290).unwrap(), NodeState::Free);
-        let mut left_node2 = InnerNode::new(Range::new(0x270, 0x279).unwrap(), NodeState::Free);
-        let left_node3 = InnerNode::new(Range::new(0x260, 0x269).unwrap(), NodeState::Free);
-        let right_node2 = InnerNode::new(Range::new(0x313, 0x315).unwrap(), NodeState::Free);
+    fn test_tree_insert_duplicate_negative() {
+        let range = Range::new(0x100, 0x200).unwrap();
+        let tree = Box::new(InnerNode::new(range, NodeState::Allocated));
+        let res = tree.insert(range, NodeState::Free);
+        assert_eq!(res.unwrap_err(), Error::Overlap(range, range));
+    }
 
-        balanced_tree.height = 4;
-        left_node1.height = 3;
-        left_node2.height = 2;
-        right_node1.height = 2;
-
-        left_node2.left = Some(Box::new(left_node3));
-        left_node1.left = Some(Box::new(left_node2));
-        right_node1.right = Some(Box::new(right_node2));
-        balanced_tree.left = Some(Box::new(left_node1));
-        balanced_tree.right = Some(Box::new(right_node1));
-        balanced_tree = *balanced_tree.delete_root().unwrap();
-
-        // Check that the tree remains balanced after the root is deleted.
-        // This test manually verifies that the structure of the tree is the
-        // expected one after a node is deleted. This test will be deleted
-        // and a method to check that a tree is balanced will be implemented
-        // when the insert/delete methods are added.
-        assert_eq!(balanced_tree.key, Range::new(0x280, 0x290).unwrap());
-        assert_eq!(
-            balanced_tree.clone().left.unwrap().as_ref().key,
-            Range::new(0x270, 0x279).unwrap()
-        );
-        assert_eq!(
-            balanced_tree
-                .clone()
-                .left
-                .unwrap()
-                .left
-                .unwrap()
-                .as_ref()
-                .key,
-            Range::new(0x260, 0x269).unwrap()
-        );
-        assert_eq!(
-            balanced_tree.clone().right.unwrap().as_ref().key,
-            Range::new(0x311, 0x312).unwrap()
-        );
-        assert_eq!(
-            balanced_tree.right.unwrap().right.unwrap().as_ref().key,
-            Range::new(0x313, 0x315).unwrap()
-        );
+    #[test]
+    fn test_tree_stack_overflow_negative() {
+        let mut inner_node =
+            InnerNode::new(Range::new(0x100, 0x200).unwrap(), NodeState::Allocated);
+        inner_node.height = 50;
+        let tree = Box::new(inner_node);
+        let res = tree.insert(Range::new(0x100, 0x200).unwrap(), NodeState::Free);
+        assert_eq!(res.unwrap_err(), Error::Overflow);
     }
 }

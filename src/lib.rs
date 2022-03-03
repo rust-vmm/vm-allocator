@@ -36,6 +36,10 @@ pub enum Error {
     /// Alignment value is invalid
     #[error("Alignment value is invalid.")]
     InvalidAlignment,
+    /// The range that we try to insert into the interval tree is overlapping
+    /// with another node from the tree.
+    #[error("Addresses are overlapping.{0:?} intersects with existing {1:?}")]
+    Overlap(allocation_engine::Range, allocation_engine::Range),
 }
 
 /// Wrapper over std::result::Result
