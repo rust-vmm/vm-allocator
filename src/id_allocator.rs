@@ -64,7 +64,7 @@ impl IdAllocator {
         // If no id was freed before we return the next available id.
         if let Some(next_id) = self.next_id {
             if next_id > self.range_end {
-                return Err(Error::ResourceExhausted);
+                return Err(Error::ResourceNotAvailable);
             }
             // Prepare the next available id. If the addition overflows we
             // set the next_id field to None and return Overflow at the next
@@ -120,7 +120,7 @@ mod tests {
 
         assert_eq!(
             legacy_irq_allocator.allocate_id().unwrap_err(),
-            Error::ResourceExhausted
+            Error::ResourceNotAvailable
         );
     }
 
