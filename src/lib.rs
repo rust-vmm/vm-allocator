@@ -16,7 +16,7 @@ use std::result;
 use thiserror::Error;
 
 /// Error type for IdAllocator usage.
-#[derive(Debug, PartialEq, Error)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
 pub enum Error {
     /// Management operations on desired resource resulted in overflow.
     #[error("Management operations on desired resource resulted in overflow.")]
@@ -47,6 +47,9 @@ pub enum Error {
     /// are not valid.
     #[error("Invalid state transition for node {0:?} from {1:?} to NodeState::Free")]
     InvalidStateTransition(Range, NodeState),
+    /// Address is unaligned
+    #[error("The address is not aligned.")]
+    UnalignedAddress,
 }
 
 /// Wrapper over std::result::Result
