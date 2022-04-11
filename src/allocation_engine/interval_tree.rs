@@ -2,7 +2,7 @@
 // Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2
 
-use crate::{Error, Range, Result};
+use crate::{AllocPolicy, Constraint, Error, Range, Result};
 use std::cmp::{max, Ordering};
 
 /// Returns the first multiple of `alignment` that is lower or equal to the
@@ -375,10 +375,152 @@ impl InnerNode {
         }
         Some(self)
     }
+
+    /// Returns the best node from the tree to place the desired memory slot
+    /// and a Range object with the start address aligned to the value specified
+    /// in the constraint.The Range returned by this method may be larger than
+    /// what was requested. It's up for the caller to split the node if it wants
+    /// to allocate the exact size from this node.
+    fn find_candidate(&self, constraint: &Constraint) -> Result<(&Self, Range)> {
+        match constraint.policy {
+            // Returns the first node from the managed address space that is
+            // satisfying the specified constraints or `ResourceNotAvailable`
+            // if the request can not be satisfied.
+            AllocPolicy::FirstMatch => self.first_match(constraint),
+            // Returns the last node from the managed address space that is
+            // satisfying the specified constraints or `ResourceNotAvailable`
+            // if the request can not be satisfied.
+            AllocPolicy::LastMatch => self.last_match(constraint),
+            // Returns the node containing the address specified or the
+            // `ResourceNotAvailable` error if any of the sanity checks is not
+            // passing.
+            AllocPolicy::ExactMatch(start_address) => {
+                // Search the node in the interval tree that contains the
+                // desired starting address.
+                let node = self
+                    .search_superset(&Range::new(start_address, start_address + 1)?)
+                    .ok_or(Error::ResourceNotAvailable)?;
+                let end_address = start_address
+                    .checked_add(constraint.size())
+                    .ok_or(Error::Overflow)?;
+                // We should check that starting from the desired address the
+                // whole memory slot will fit in the selected node.
+                if end_address > node.key.end() {
+                    return Err(Error::ResourceNotAvailable);
+                }
+                Ok((node, Range::new(start_address, end_address)?))
+            }
+        }
+    }
+
+    /// Returns the first node from the managed address space that is satisfying
+    /// the specified constraints and the aligned address of the desired memory
+    /// slot. Or if the request can not be satisfied `ResourceNotAvailable`.
+    fn first_match(&self, constraint: &Constraint) -> Result<(&Self, Range)> {
+        // Searches the first free node from the tree.
+        let mut res = self
+            .left
+            .as_ref()
+            .map_or(Err(Error::ResourceNotAvailable), |node| {
+                node.first_match(constraint)
+            });
+
+        // If the result is Error::ResourceNotAvailable this means that we got
+        // to the first free node from the tree. We check if this node is
+        // satisfying all the constraints, if yes save the values and return
+        // them at the end of the method.
+        if res == Err(Error::ResourceNotAvailable) {
+            res = self
+                .check_constraint(constraint)
+                .map_or(res, |node| Ok((self, node)))
+        }
+
+        // If res is still Error::ResourceNotAvailable we continue our search
+        // on the right part of the tree, as the method is recursive the same
+        // logic from above will apply.
+        if res == Err(Error::ResourceNotAvailable) {
+            res = self
+                .right
+                .as_ref()
+                .map_or(Err(Error::ResourceNotAvailable), |node| {
+                    node.first_match(constraint)
+                });
+        }
+        res
+    }
+
+    /// Returns the last node from the managed address space that is satisfying
+    /// the specified constraints and the aligned address of the desired memory
+    /// slot. Or if the request can not be satisfied `ResourceNotAvailable`.
+    fn last_match(&self, constraint: &Constraint) -> Result<(&Self, Range)> {
+        // Searches the last free node from the tree.
+        let mut res = self
+            .right
+            .as_ref()
+            .map_or(Err(Error::ResourceNotAvailable), |node| {
+                node.last_match(constraint)
+            });
+
+        // If the result is Error::ResourceNotAvailable this means that we got
+        // to the last free node from the tree. We check if this node is
+        // satisfying all the constraints, if yes save the values and return
+        // them at the end of the method
+        if res == Err(Error::ResourceNotAvailable) {
+            res = self
+                .check_constraint(constraint)
+                .map_or(res, |node| Ok((self, node)))
+        }
+
+        // If res is still Error::ResourceNotAvailable we continue our search
+        // on the left part of the tree, as the method is recursive the same
+        // logic from above will apply.
+        if res == Err(Error::ResourceNotAvailable) {
+            res = self
+                .left
+                .as_ref()
+                .map_or(Err(Error::ResourceNotAvailable), |node| {
+                    node.last_match(constraint)
+                });
+        }
+        res
+    }
+
+    /// Check that the candidate node is satisfying all the constraints for
+    /// the requested memory slot.
+    fn check_constraint(&self, constraint: &Constraint) -> Result<Range> {
+        // Exit if node is already allocated.
+        if !self.node_state.is_free() || self.key.len() < constraint.size {
+            return Err(Error::ResourceNotAvailable);
+        }
+        let node_key = self.key;
+        // Get the starting address for the memory slot.
+        let range_start = match constraint.policy {
+            AllocPolicy::FirstMatch => align_up(node_key.start(), constraint.align)?,
+            AllocPolicy::LastMatch => {
+                let candidate_address = node_key
+                    .end()
+                    .checked_sub(constraint.size())
+                    .ok_or(Error::Overflow)?
+                    + 1;
+                let aligned_address = align_down(candidate_address, constraint.align)?;
+                if aligned_address < self.key.start() {
+                    return Err(Error::UnalignedAddress);
+                }
+                aligned_address
+            }
+            AllocPolicy::ExactMatch(_) => unreachable!(),
+        };
+        // Create the result range.
+        let key = Range::new(range_start, self.key.end())?;
+        // Check if the desired memory slot does fit in the candidate node.
+        if key.len() >= constraint.size() {
+            return Ok(key);
+        }
+        Err(Error::ResourceNotAvailable)
+    }
 }
 
 /// Compute height of the optional sub-tree.
-#[allow(dead_code)]
 fn height(node: &Option<Box<InnerNode>>) -> u64 {
     node.as_ref().map_or(0, |n| n.height)
 }
