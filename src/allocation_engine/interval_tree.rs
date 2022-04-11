@@ -525,6 +525,56 @@ fn height(node: &Option<Box<InnerNode>>) -> u64 {
     node.as_ref().map_or(0, |n| n.height)
 }
 
+/// An interval tree implementation specialized for VMM memory slots management.
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+pub struct IntervalTree {
+    root: Option<Box<InnerNode>>,
+}
+
+impl IntervalTree {
+    /// Creates a new IntervalTree object that is going to be used by the
+    /// AddressAllocator.
+    pub fn new(key: Range) -> Self {
+        IntervalTree {
+            root: Some(Box::new(InnerNode::new(key, NodeState::Free))),
+        }
+    }
+
+    fn search_superset(&self, key: &Range) -> Option<&InnerNode> {
+        match self.root {
+            None => None,
+            Some(ref node) => node.search_superset(key),
+        }
+    }
+
+    fn insert(&mut self, key: Range, node_state: NodeState) -> Result<()> {
+        match self.root.take() {
+            None => self.root = Some(Box::new(InnerNode::new(key, node_state))),
+            Some(node) => self.root = Some(node.insert(key, node_state)?),
+        };
+        Ok(())
+    }
+
+    fn mark_as_allocated(&mut self, key: &Range) -> Result<()> {
+        match self.root.as_mut() {
+            None => (),
+            Some(node) => node.mark_as_allocated(key)?,
+        };
+        Ok(())
+    }
+
+    fn delete(&mut self, key: &Range) -> Result<()> {
+        if let Some(node) = self.root.take() {
+            if node.search(key).is_none() {
+                self.root = Some(node);
+                return Err(Error::ResourceNotAvailable);
+            }
+            self.root = node.delete(key);
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
