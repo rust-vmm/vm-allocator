@@ -102,6 +102,60 @@ impl Range {
     }
 }
 
+/// Struct to describe resource allocation constraints.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Constraint {
+    /// Size to allocate.
+    size: u64,
+    /// Alignment for the allocated resource.
+    align: u64,
+    /// Resource allocation policy.
+    policy: AllocPolicy,
+}
+
+impl Constraint {
+    /// Create a new constraint object with default settings.
+    pub fn new(size: u64) -> Result<Self> {
+        Ok(Constraint {
+            size,
+            align: 4,
+            policy: AllocPolicy::default(),
+        })
+    }
+
+    /// Set the alignment constraint.
+    pub fn set_align(mut self, align: u64) -> Result<Self> {
+        if let AllocPolicy::ExactMatch(start_address) = self.policy {
+            if start_address % align != 0 {
+                return Err(Error::UnalignedAddress);
+            }
+        }
+        self.align = align;
+        Ok(self)
+    }
+
+    /// Get the alignment constraint
+    pub fn align(self) -> u64 {
+        self.align
+    }
+
+    /// Set the allocation policy.
+    pub fn set_policy(mut self, policy: AllocPolicy) -> Result<Self> {
+        if let AllocPolicy::ExactMatch(start_address) = policy {
+            if start_address % self.align != 0 {
+                return Err(Error::UnalignedAddress);
+            }
+        }
+        self.policy = policy;
+        Ok(self)
+    }
+
+    /// Get the size constraint
+    pub fn size(self) -> u64 {
+        self.size
+    }
+}
+
 /// Policy for resource allocation.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum AllocPolicy {

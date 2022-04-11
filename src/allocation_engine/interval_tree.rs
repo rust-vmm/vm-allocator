@@ -2,21 +2,8 @@
 // Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2
 
-use crate::{AllocPolicy, Error, Range, Result};
+use crate::{Error, Range, Result};
 use std::cmp::{max, Ordering};
-
-/// Struct to describe resource allocation constraints.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Constraint {
-    /// Size to allocate.
-    pub size: u64,
-    /// Range where the allocated resource will be placed.
-    pub desired_range: Range,
-    /// Alignment for the allocated resource.
-    pub align: u64,
-    /// Resource allocation policy.
-    pub policy: AllocPolicy,
-}
 
 /// Returns the first multiple of `alignment` that is lower or equal to the
 /// specified address. This method works only for alignment values that are a
