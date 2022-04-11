@@ -573,6 +573,52 @@ impl IntervalTree {
         }
         Ok(())
     }
+
+    /// This method implements the allocation logic for the address allocator.
+    /// Given a set of constraints it will find the most suitable free node to
+    /// fit the desired memory slot. This will modify the backing interval tree
+    /// such that the range representing the desired memory slot will appear as
+    /// an node with the state `NodeState::Allocated` while the leftovers of
+    /// the previous node will be present in the tree as free nodes.
+    pub fn allocate(&mut self, constraint: Constraint) -> Result<Range> {
+        // Return ResourceNotAvailable if we can not get a reference to the
+        // root node.
+        let root = self.root.as_ref().ok_or(Error::ResourceNotAvailable)?;
+        let (node, range) = root.find_candidate(&constraint)?;
+        let node_key = node.key;
+        // Create a new range starting at an address that is aligned to the
+        // value specified by constraint.
+        let result = Range::new(range.start(), range.start() + constraint.size - 1)?;
+
+        // Allocate a resource from the node, no need to split the candidate node.
+        if node_key.start() == result.start() && node_key.len() == constraint.size {
+            self.mark_as_allocated(&node_key)?;
+            return Ok(node_key);
+        }
+
+        // If we do not find a node that is a perfect match we delete the old
+        // node and insert three new nodes. The first node will represent the
+        // range [old_node.start, aligned_addr - 1] and will be marked as free.
+        // The second node will have the state NodeState::Allocated and is
+        // actually the requested memory slot. The last node will have the
+        // state NodeState::Free and is what is left from the old node.
+        self.delete(&node_key)?;
+        if result.start > node_key.start() {
+            self.insert(
+                Range::new(node_key.start(), result.start() - 1)?,
+                NodeState::Free,
+            )?;
+        }
+
+        self.insert(result, NodeState::Allocated)?;
+        if result.end() < node_key.end() {
+            self.insert(
+                Range::new(result.end() + 1, node_key.end())?,
+                NodeState::Free,
+            )?;
+        }
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
