@@ -2,8 +2,8 @@
 // Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2
 
-use crate::{Error, Result};
-use std::cmp::{max, min, Ordering};
+use crate::{Error, Range, Result};
+use std::cmp::{max, Ordering};
 
 /// Policy for resource allocation.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -37,54 +37,6 @@ pub struct Constraint {
     pub policy: AllocPolicy,
 }
 
-/// A closed interval range [start, end] used to describe a
-/// memory slot that will be assigned to a device by the VMM.
-/// This structure represents the key of the Node object in
-/// the interval tree implementation.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Ord, Debug)]
-pub struct Range {
-    /// Lower boundary of the interval.
-    start: u64,
-    /// Upper boundary of the interval.
-    end: u64,
-}
-
-#[allow(clippy::len_without_is_empty)]
-impl Range {
-    /// Create a new Range object.
-    pub fn new(start: u64, end: u64) -> Result<Self> {
-        if start > end {
-            return Err(Error::InvalidRange(start, end));
-        }
-        Ok(Range { start, end })
-    }
-
-    /// Get length of the range.
-    pub fn len(&self) -> u64 {
-        self.end - self.start + 1
-    }
-
-    /// Check whether two Range objects overlap with each other.
-    pub fn overlaps(&self, other: &Range) -> bool {
-        max(self.start, other.start) <= min(self.end, other.end)
-    }
-
-    /// Check whether the key is fully covered.
-    pub fn contains(&self, other: &Range) -> bool {
-        self.start <= other.start && self.end >= other.end
-    }
-
-    /// Get the lower boundary of the range.
-    pub fn start(&self) -> u64 {
-        self.start
-    }
-
-    /// Get the upper boundary of the range.
-    pub fn end(&self) -> u64 {
-        self.end
-    }
-}
-
 /// Returns the first multiple of `alignment` that is lower or equal to the
 /// specified address. This method works only for alignment values that are a
 /// power of two.
@@ -92,9 +44,9 @@ impl Range {
 /// # Examples
 /// ```rust
 /// extern crate vm_allocator;
-/// use vm_allocator::allocation_engine::{align_down, Range};
-/// use vm_allocator::Error;
-/// use vm_allocator::Result;
+/// use vm_allocator::allocation_engine::align_down;
+
+/// use vm_allocator::{Error, Range, Result} ;
 ///
 /// fn intervals_align_down() -> Result<u64> {
 ///     let address = 5;
@@ -123,9 +75,8 @@ pub fn align_down(address: u64, alignment: u64) -> Result<u64> {
 /// # Examples
 /// ```rust
 /// extern crate vm_allocator;
-/// use vm_allocator::allocation_engine::{align_up, Range};
-/// use vm_allocator::Error;
-/// use vm_allocator::Result;
+/// use vm_allocator::allocation_engine::align_up;
+/// use vm_allocator::{Error, Range, Result} ;
 ///
 /// fn intervals_align_up() -> Result<u64> {
 ///     let address = 3;
@@ -469,49 +420,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_range() {
-        assert_eq!(Range::new(2, 1).unwrap_err(), Error::InvalidRange(2, 1));
-    }
-
-    #[test]
-    fn test_range_overlaps() {
-        let range_a = Range::new(1u64, 4u64).unwrap();
-        let range_b = Range::new(4u64, 6u64).unwrap();
-        let range_c = Range::new(2u64, 3u64).unwrap();
-        let range_d = Range::new(4u64, 4u64).unwrap();
-        let range_e = Range::new(5u64, 6u64).unwrap();
-
-        assert!(range_a.overlaps(&range_b));
-        assert!(range_b.overlaps(&range_a));
-        assert!(range_a.overlaps(&range_c));
-        assert!(range_c.overlaps(&range_a));
-        assert!(range_a.overlaps(&range_d));
-        assert!(range_d.overlaps(&range_a));
-        assert!(!range_a.overlaps(&range_e));
-        assert!(!range_e.overlaps(&range_a));
-
-        assert_eq!(range_a.len(), 4);
-        assert_eq!(range_d.len(), 1);
-    }
-
-    #[test]
-    fn test_range_contain() {
-        let range_a = Range::new(2u64, 6u64).unwrap();
-        assert!(range_a.contains(&Range::new(2u64, 3u64).unwrap()));
-        assert!(range_a.contains(&Range::new(3u64, 4u64).unwrap()));
-        assert!(range_a.contains(&Range::new(5u64, 5u64).unwrap()));
-        assert!(range_a.contains(&Range::new(5u64, 6u64).unwrap()));
-        assert!(range_a.contains(&Range::new(6u64, 6u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(1u64, 1u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(1u64, 2u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(1u64, 3u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(1u64, 7u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(7u64, 8u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(6u64, 7u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(7u64, 8u64).unwrap()));
-    }
-
-    #[test]
     fn test_range_align_up() {
         assert_eq!(align_up(2, 0).unwrap_err(), Error::InvalidAlignment);
         assert_eq!(align_up(2, 1).unwrap(), 2);
@@ -527,31 +435,6 @@ mod tests {
             align_up(0xFFFF_FFFF_FFFF_FFFDu64, 4).unwrap_err(),
             Error::Overflow
         );
-    }
-
-    #[test]
-    fn test_range_ord() {
-        let range_a = Range::new(1u64, 4u64).unwrap();
-        let range_b = Range::new(1u64, 4u64).unwrap();
-        let range_c = Range::new(1u64, 3u64).unwrap();
-        let range_d = Range::new(1u64, 5u64).unwrap();
-        let range_e = Range::new(2u64, 2u64).unwrap();
-
-        assert_eq!(range_a, range_b);
-        assert_eq!(range_b, range_a);
-        assert!(range_a > range_c);
-        assert!(range_c < range_a);
-        assert!(range_a < range_d);
-        assert!(range_d > range_a);
-        assert!(range_a < range_e);
-        assert!(range_e > range_a);
-    }
-
-    #[test]
-    fn test_getters() {
-        let range = Range::new(3, 5).unwrap();
-        assert_eq!(range.start(), 3);
-        assert_eq!(range.end(), 5);
     }
 
     #[test]
@@ -598,7 +481,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            tree.search_superset(&Range::new(0x100, 0x100).unwrap()),
+            tree.search_superset(&Range::new(0x100, 0x101).unwrap()),
             Some(&(*tree))
         );
         assert_eq!(
@@ -614,11 +497,11 @@ mod tests {
             Some(&right_child)
         );
         assert_eq!(
-            tree.search_superset(&Range::new(0x210, 0x210).unwrap()),
+            tree.search_superset(&Range::new(0x209, 0x210).unwrap()),
             Some(&right_child)
         );
         assert_eq!(
-            tree.search_superset(&Range::new(0x2FF, 0x2FF).unwrap()),
+            tree.search_superset(&Range::new(0x2EF, 0x2FF).unwrap()),
             Some(&right_child)
         );
         assert_eq!(
@@ -626,11 +509,11 @@ mod tests {
             None
         );
         assert_eq!(
-            tree.search_superset(&Range::new(0x300, 0x300).unwrap()),
+            tree.search_superset(&Range::new(0x300, 0x301).unwrap()),
             None
         );
         assert_eq!(
-            tree.search_superset(&Range::new(0x1ff, 0x300).unwrap()),
+            tree.search_superset(&Range::new(0x1FF, 0x300).unwrap()),
             None
         );
     }
