@@ -4,4 +4,4 @@
 
 mod interval_tree;
 
-pub use interval_tree::{align_down, align_up, AllocPolicy, InnerNode, NodeState};
+pub use interval_tree::{align_down, align_up, InnerNode, NodeState};
