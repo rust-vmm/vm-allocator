@@ -4,10 +4,12 @@
 
 #![deny(missing_docs)]
 
+mod address_allocator;
 /// Allocation engine used by address allocator.
-pub mod allocation_engine;
+mod allocation_engine;
 mod id_allocator;
 
+pub use crate::address_allocator::AddressAllocator;
 use crate::allocation_engine::NodeState;
 pub use crate::id_allocator::IdAllocator;
 use std::cmp::max;
@@ -50,6 +52,12 @@ pub enum Error {
     /// Address is unaligned
     #[error("The address is not aligned.")]
     UnalignedAddress,
+    /// Management operations on desired resource resulted in underflow.
+    #[error("Management operations on desired resource resulted in underflow.")]
+    Underflow,
+    /// The size of the desired resource is not invalid.
+    #[error("The specified size: {0} is not valid.")]
+    InvalidSize(u64),
 }
 
 /// Wrapper over std::result::Result
