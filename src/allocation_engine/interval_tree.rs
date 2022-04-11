@@ -619,6 +619,50 @@ impl IntervalTree {
         }
         Ok(result)
     }
+
+    /// Free an allocated range.
+    pub fn free(&mut self, key: &Range) -> Result<()> {
+        self.delete(key)?;
+        let mut range = *key;
+
+        // If the deleted range did not start at 0 we try to find ranges that
+        // are placed to its left so we can merge them together.
+        if range.start() > 0 {
+            if let Some(node) =
+                self.search_superset(&Range::new(range.start() - 2, range.start() - 1)?)
+            {
+                if node.node_state == NodeState::Free {
+                    range = Range::new(node.key.start(), range.end())?;
+                }
+            }
+        }
+        // If the deleted range did not end at u64::MAX we try to find ranges
+        // that are placed to its left so we can merge them together.
+        if range.end() < std::u64::MAX {
+            if let Some(node) = self.search_superset(&Range::new(range.end(), range.end() + 1)?) {
+                if node.node_state == NodeState::Free {
+                    range = Range::new(range.start(), node.key.end())?;
+                }
+            }
+        }
+
+        // If we merged the freed node to the one on its left we should delete
+        // the left node as it now belongs to a bigger range that will be
+        // inserted in the tree.
+        if range.start() < key.start() {
+            self.delete(&Range::new(range.start(), key.start() - 1)?)?;
+        }
+
+        // If we merged the freed node to the one on its right we should delete
+        // the right node as it now belongs to a bigger range that will be
+        // inserted in the tree.
+        if range.end() > key.end() {
+            self.delete(&Range::new(key.end() + 1, range.end())?)?;
+        }
+        // Insert in the tree the new created range.
+        self.insert(range, NodeState::Free)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
