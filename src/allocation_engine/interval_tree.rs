@@ -8,27 +8,6 @@ use std::cmp::{max, Ordering};
 /// Returns the first multiple of `alignment` that is lower or equal to the
 /// specified address. This method works only for alignment values that are a
 /// power of two.
-///
-/// # Examples
-/// ```rust
-/// extern crate vm_allocator;
-/// use vm_allocator::allocation_engine::align_down;
-
-/// use vm_allocator::{Error, Range, Result} ;
-///
-/// fn intervals_align_down() -> Result<u64> {
-///     let address = 5;
-///     if let Ok(res) = align_down(address, 2) {
-///         if res == 4 {
-///             return Ok(res);
-///         }
-///         return Err(Error::Overflow);
-///     }
-///     Err(Error::Overflow)
-/// }
-///
-/// # intervals_align_down().unwrap();
-/// ```
 pub fn align_down(address: u64, alignment: u64) -> Result<u64> {
     if !alignment.is_power_of_two() {
         return Err(Error::InvalidAlignment);
@@ -39,26 +18,6 @@ pub fn align_down(address: u64, alignment: u64) -> Result<u64> {
 /// Returns the first multiple of `alignment` that is greater or equal to the
 /// specified address. This method works only for alignment values that are a
 /// power of two.
-///
-/// # Examples
-/// ```rust
-/// extern crate vm_allocator;
-/// use vm_allocator::allocation_engine::align_up;
-/// use vm_allocator::{Error, Range, Result} ;
-///
-/// fn intervals_align_up() -> Result<u64> {
-///     let address = 3;
-///     if let Ok(res) = align_up(address, 2) {
-///         if res == 4 {
-///             return Ok(res);
-///         }
-///         return Err(Error::Overflow);
-///     }
-///     Err(Error::Overflow)
-/// }
-///
-/// # intervals_align_up().unwrap();
-/// ```
 pub fn align_up(address: u64, alignment: u64) -> Result<u64> {
     if alignment == 0 {
         return Err(Error::InvalidAlignment);
