@@ -44,8 +44,7 @@ pub enum NodeState {
 }
 
 impl NodeState {
-    #[allow(dead_code)]
-    pub(crate) fn is_free(&self) -> bool {
+    fn is_free(&self) -> bool {
         *self == NodeState::Free
     }
 }
@@ -67,7 +66,6 @@ pub struct InnerNode {
 
 impl InnerNode {
     /// Creates a new InnerNode object.
-    #[allow(dead_code)]
     fn new(key: Range, node_state: NodeState) -> Self {
         InnerNode {
             key,
@@ -80,7 +78,6 @@ impl InnerNode {
 
     /// Returns a readonly reference to the node associated with the `key` or
     /// None if the searched key does not exist in the tree.
-    #[allow(dead_code)]
     fn search(&self, key: &Range) -> Option<&InnerNode> {
         match self.key.cmp(key) {
             Ordering::Equal => Some(self),
@@ -93,7 +90,6 @@ impl InnerNode {
     /// None if there is no Node representing an interval that covers the
     /// searched key. For a key [a, b], this method will return a node with
     /// a key [c, d] such that c <= a and b <= d.
-    #[allow(dead_code)]
     fn search_superset(&self, key: &Range) -> Option<&InnerNode> {
         if self.key.contains(key) {
             Some(self)
@@ -110,7 +106,6 @@ impl InnerNode {
 
     /// Rotates the tree such that height difference between subtrees
     /// is not greater than abs(1).
-    #[allow(dead_code)]
     fn rotate(self: Box<Self>) -> Box<Self> {
         let l = height(&self.left);
         let r = height(&self.right);
@@ -131,7 +126,6 @@ impl InnerNode {
     }
 
     /// Performs a single left rotation on this node.
-    #[allow(dead_code)]
     fn rotate_left(mut self: Box<Self>) -> Option<Box<Self>> {
         if let Some(mut new_root) = self.right.take() {
             self.right = new_root.left.take();
@@ -144,7 +138,6 @@ impl InnerNode {
     }
 
     /// Performs a single right rotation on this node.
-    #[allow(dead_code)]
     fn rotate_right(mut self: Box<Self>) -> Option<Box<Self>> {
         if let Some(mut new_root) = self.left.take() {
             self.left = new_root.right.take();
@@ -157,7 +150,6 @@ impl InnerNode {
     }
 
     /// Performs a rotation when the left successor is too high.
-    #[allow(dead_code)]
     fn rotate_left_successor(mut self: Box<Self>) -> Option<Box<Self>> {
         if let Some(left) = self.left.take() {
             if height(&left.left) < height(&left.right) {
@@ -172,7 +164,6 @@ impl InnerNode {
     }
 
     /// Performs a rotation when the right successor is too high.
-    #[allow(dead_code)]
     fn rotate_right_successor(mut self: Box<Self>) -> Option<Box<Self>> {
         if let Some(right) = self.right.take() {
             if height(&right.left) > height(&right.right) {
@@ -187,7 +178,6 @@ impl InnerNode {
     }
 
     /// Deletes the entry point of this tree structure.
-    #[allow(dead_code)]
     fn delete_root(mut self) -> Option<Box<Self>> {
         match (self.left.take(), self.right.take()) {
             (None, None) => None,
@@ -200,7 +190,6 @@ impl InnerNode {
     /// Finds the minimal key below the tree and returns a new optional tree
     /// where the minimal value has been removed and the (optional) minimal node
     /// as tuple (min_node, remaining).
-    #[allow(dead_code)]
     fn get_new_root(mut self: Box<Self>) -> (Box<Self>, Option<Box<Self>>) {
         match self.left.take() {
             None => {
@@ -218,7 +207,6 @@ impl InnerNode {
 
     /// Creates a single tree from the subtrees resulted from deleting the root
     /// node.
-    #[allow(dead_code)]
     fn combine_subtrees(l: Box<Self>, r: Box<Self>) -> Box<Self> {
         let (mut new_root, remaining) = r.get_new_root();
         new_root.left = Some(l);
@@ -228,7 +216,6 @@ impl InnerNode {
     }
 
     /// Updates cached information of the node.
-    #[allow(dead_code)]
     fn update_cached_height(&mut self) {
         self.height = max(height(&self.left), height(&self.right)) + 1;
     }
@@ -237,12 +224,7 @@ impl InnerNode {
     /// tree will be balanced. The node_state parameter is needed because in
     /// the AddressAllocator allocation logic we will need to insert both free
     /// and allocated nodes.
-    #[allow(dead_code)]
-    pub(crate) fn insert(
-        mut self: Box<Self>,
-        key: Range,
-        node_state: NodeState,
-    ) -> Result<Box<Self>> {
+    fn insert(mut self: Box<Self>, key: Range, node_state: NodeState) -> Result<Box<Self>> {
         // The InnerNode structure has 48 a length of 48 bytes. With other nested
         // calls that are made during the insertion process the size occupied
         // on the stack by just one insert call is around 122 bytes. Considering
@@ -284,8 +266,7 @@ impl InnerNode {
     /// find an existing node with the state `NodeState::Free` that satisfies
     /// all constraints of an allocation request. The recursion is safe as we
     /// have in place a maximum height for the tree.
-    #[allow(dead_code)]
-    pub(crate) fn mark_as_allocated(&mut self, key: &Range) -> Result<()> {
+    fn mark_as_allocated(&mut self, key: &Range) -> Result<()> {
         match self.key.cmp(key) {
             Ordering::Equal => {
                 if self.node_state != NodeState::Free {
@@ -309,8 +290,7 @@ impl InnerNode {
     ///
     /// Note: it doesn't return whether the key exists in the subtree, so caller
     /// need to ensure the logic.
-    #[allow(dead_code)]
-    pub(crate) fn delete(mut self: Box<Self>, key: &Range) -> Option<Box<Self>> {
+    fn delete(mut self: Box<Self>, key: &Range) -> Option<Box<Self>> {
         match self.key.cmp(key) {
             Ordering::Equal => {
                 return self.delete_root();
