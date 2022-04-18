@@ -340,14 +340,15 @@ impl InnerNode {
                     .search_superset(&Range::new(start_address, start_address + 1)?)
                     .ok_or(Error::ResourceNotAvailable)?;
                 let end_address = start_address
-                    .checked_add(constraint.size())
+                    .checked_add(constraint.size().checked_sub(1).ok_or(Error::Underflow)?)
                     .ok_or(Error::Overflow)?;
                 // We should check that starting from the desired address the
                 // whole memory slot will fit in the selected node.
-                if end_address > node.key.end() {
+                let range = Range::new(start_address, end_address)?;
+                if !node.key.contains(&range) {
                     return Err(Error::ResourceNotAvailable);
                 }
-                Ok((node, Range::new(start_address, end_address)?))
+                Ok((node, range))
             }
         }
     }
