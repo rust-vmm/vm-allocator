@@ -577,7 +577,7 @@ impl IntervalTree {
         }
         // If the deleted range did not end at u64::MAX we try to find ranges
         // that are placed to its left so we can merge them together.
-        if range.end() < std::u64::MAX {
+        if range.end() < u64::MAX {
             if let Some(node) = self.search_superset(&Range::new(range.end(), range.end() + 1)?) {
                 if node.node_state == NodeState::Free {
                     range = Range::new(range.start(), node.key.end())?;
