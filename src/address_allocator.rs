@@ -76,6 +76,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_regression_exact_match_length_check() {
+        let mut pool = AddressAllocator::new(0x0, 0x2000).unwrap();
+        let res = pool
+            .allocate(0x1000, 0x1000, AllocPolicy::ExactMatch(0x1000))
+            .unwrap();
+        assert_eq!(res, Range::new(0x1000, 0x1FFF).unwrap());
+        let res = pool
+            .allocate(0x1000, 0x1000, AllocPolicy::ExactMatch(0x0))
+            .unwrap();
+        assert_eq!(res, Range::new(0x0, 0x0FFF).unwrap());
+    }
+
+    #[test]
     fn test_new_fails_overflow() {
         assert_eq!(
             AddressAllocator::new(u64::max_value(), 0x100).unwrap_err(),
