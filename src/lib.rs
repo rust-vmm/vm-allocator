@@ -44,11 +44,11 @@ pub enum Error {
     /// The range that we try to insert into the interval tree is overlapping
     /// with another node from the tree.
     #[error("Addresses are overlapping.{0:?} intersects with existing {1:?}")]
-    Overlap(Range, Range),
+    Overlap(RangeInclusive, RangeInclusive),
     /// A node state can be changed just from Free to Allocated, other transitions
     /// are not valid.
     #[error("Invalid state transition for node {0:?} from {1:?} to NodeState::Free")]
-    InvalidStateTransition(Range, NodeState),
+    InvalidStateTransition(RangeInclusive, NodeState),
     /// Address is unaligned
     #[error("The address is not aligned.")]
     UnalignedAddress,
@@ -67,7 +67,7 @@ pub type Result<T> = result::Result<T, Error>;
 /// will be assigned to a device by the VMM. This structure represents the key
 /// of the Node object in the interval tree implementation.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Ord, Debug)]
-pub struct Range {
+pub struct RangeInclusive {
     /// Lower boundary of the interval.
     start: u64,
     /// Upper boundary of the interval.
@@ -75,13 +75,13 @@ pub struct Range {
 }
 
 #[allow(clippy::len_without_is_empty)]
-impl Range {
-    /// Create a new Range object.
+impl RangeInclusive {
+    /// Create a new RangeInclusive object.
     pub fn new(start: u64, end: u64) -> Result<Self> {
         if start >= end {
             return Err(Error::InvalidRange(start, end));
         }
-        Ok(Range { start, end })
+        Ok(RangeInclusive { start, end })
     }
 
     /// Get length of the range.
@@ -89,13 +89,13 @@ impl Range {
         self.end - self.start + 1
     }
 
-    /// Check whether two Range objects overlap with each other.
-    pub fn overlaps(&self, other: &Range) -> bool {
+    /// Check whether two RangeInclusive objects overlap with each other.
+    pub fn overlaps(&self, other: &RangeInclusive) -> bool {
         max(self.start, other.start) <= min(self.end, other.end)
     }
 
     /// Check whether the key is fully covered.
-    pub fn contains(&self, other: &Range) -> bool {
+    pub fn contains(&self, other: &RangeInclusive) -> bool {
         self.start <= other.start && self.end >= other.end
     }
 
@@ -188,16 +188,22 @@ mod tests {
 
     #[test]
     fn test_new_range() {
-        assert_eq!(Range::new(2, 1).unwrap_err(), Error::InvalidRange(2, 1));
-        assert_eq!(Range::new(1, 1).unwrap_err(), Error::InvalidRange(1, 1));
+        assert_eq!(
+            RangeInclusive::new(2, 1).unwrap_err(),
+            Error::InvalidRange(2, 1)
+        );
+        assert_eq!(
+            RangeInclusive::new(1, 1).unwrap_err(),
+            Error::InvalidRange(1, 1)
+        );
     }
 
     #[test]
     fn test_range_overlaps() {
-        let range_a = Range::new(1u64, 4u64).unwrap();
-        let range_b = Range::new(4u64, 6u64).unwrap();
-        let range_c = Range::new(2u64, 3u64).unwrap();
-        let range_e = Range::new(5u64, 6u64).unwrap();
+        let range_a = RangeInclusive::new(1u64, 4u64).unwrap();
+        let range_b = RangeInclusive::new(4u64, 6u64).unwrap();
+        let range_c = RangeInclusive::new(2u64, 3u64).unwrap();
+        let range_e = RangeInclusive::new(5u64, 6u64).unwrap();
 
         assert!(range_a.overlaps(&range_b));
         assert!(range_b.overlaps(&range_a));
@@ -211,24 +217,24 @@ mod tests {
 
     #[test]
     fn test_range_contain() {
-        let range_a = Range::new(2u64, 6u64).unwrap();
-        assert!(range_a.contains(&Range::new(2u64, 3u64).unwrap()));
-        assert!(range_a.contains(&Range::new(3u64, 4u64).unwrap()));
-        assert!(range_a.contains(&Range::new(5u64, 6u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(1u64, 2u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(1u64, 3u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(1u64, 7u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(7u64, 8u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(6u64, 7u64).unwrap()));
-        assert!(!range_a.contains(&Range::new(7u64, 8u64).unwrap()));
+        let range_a = RangeInclusive::new(2u64, 6u64).unwrap();
+        assert!(range_a.contains(&RangeInclusive::new(2u64, 3u64).unwrap()));
+        assert!(range_a.contains(&RangeInclusive::new(3u64, 4u64).unwrap()));
+        assert!(range_a.contains(&RangeInclusive::new(5u64, 6u64).unwrap()));
+        assert!(!range_a.contains(&RangeInclusive::new(1u64, 2u64).unwrap()));
+        assert!(!range_a.contains(&RangeInclusive::new(1u64, 3u64).unwrap()));
+        assert!(!range_a.contains(&RangeInclusive::new(1u64, 7u64).unwrap()));
+        assert!(!range_a.contains(&RangeInclusive::new(7u64, 8u64).unwrap()));
+        assert!(!range_a.contains(&RangeInclusive::new(6u64, 7u64).unwrap()));
+        assert!(!range_a.contains(&RangeInclusive::new(7u64, 8u64).unwrap()));
     }
 
     #[test]
     fn test_range_ord() {
-        let range_a = Range::new(1, 4).unwrap();
-        let range_b = Range::new(1, 4).unwrap();
-        let range_c = Range::new(1, 3).unwrap();
-        let range_d = Range::new(1, 5).unwrap();
+        let range_a = RangeInclusive::new(1, 4).unwrap();
+        let range_b = RangeInclusive::new(1, 4).unwrap();
+        let range_c = RangeInclusive::new(1, 3).unwrap();
+        let range_d = RangeInclusive::new(1, 5).unwrap();
 
         assert_eq!(range_a, range_b);
         assert_eq!(range_b, range_a);
@@ -240,7 +246,7 @@ mod tests {
 
     #[test]
     fn test_getters() {
-        let range = Range::new(3, 5).unwrap();
+        let range = RangeInclusive::new(3, 5).unwrap();
         assert_eq!(range.start(), 3);
         assert_eq!(range.end(), 5);
     }

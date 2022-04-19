@@ -50,7 +50,7 @@ impl IdAllocator {
         self.range_base <= id && id <= self.range_end
     }
 
-    /// Allocate an ID from the managed ranged.
+    /// Allocate an ID from the managed range.
     /// We first try to reuse one of the IDs released before. If there is no
     /// ID to reuse we return the next available one from the managed range.
     pub fn allocate_id(&mut self) -> Result<u32> {
