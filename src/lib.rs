@@ -78,7 +78,10 @@ pub struct RangeInclusive {
 impl RangeInclusive {
     /// Create a new RangeInclusive object.
     pub fn new(start: u64, end: u64) -> Result<Self> {
-        if start >= end {
+        // The length of the interval [0, u64::MAX] is u64::MAX + 1 which does
+        // not fit in a u64::MAX, hence we return `Error::InvalidRange` when
+        // there is an attempt to use that range.
+        if start >= end || (start == 0 && end == u64::MAX) {
             return Err(Error::InvalidRange(start, end));
         }
         Ok(RangeInclusive { start, end })
@@ -249,5 +252,11 @@ mod tests {
         let range = RangeInclusive::new(3, 5).unwrap();
         assert_eq!(range.start(), 3);
         assert_eq!(range.end(), 5);
+    }
+
+    #[test]
+    fn test_range_upper_bound() {
+        let range = RangeInclusive::new(0, u64::MAX);
+        assert_eq!(range.unwrap_err(), Error::InvalidRange(0, u64::MAX));
     }
 }
