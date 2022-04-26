@@ -12,6 +12,8 @@ pub fn align_down(address: u64, alignment: u64) -> Result<u64> {
     if !alignment.is_power_of_two() {
         return Err(Error::InvalidAlignment);
     }
+    // It is safe to subtract 1 as alignment is already checked to be greater
+    // than 0.
     Ok(address & !(alignment - 1))
 }
 
@@ -22,6 +24,8 @@ pub fn align_up(address: u64, alignment: u64) -> Result<u64> {
     if alignment == 0 {
         return Err(Error::InvalidAlignment);
     }
+    // It is safe to subtract 1 as alignment is already checked to be greater
+    // than 0.
     if let Some(intermediary_address) = address.checked_add(alignment - 1) {
         return align_down(intermediary_address, alignment);
     }
@@ -217,6 +221,8 @@ impl InnerNode {
 
     /// Updates cached information of the node.
     fn update_cached_height(&mut self) {
+        // It is safe adding 1 to the height as it can not be greater than 50
+        // hence no chance of overflowing.
         self.height = max(height(&self.left), height(&self.right)) + 1;
     }
 
@@ -238,6 +244,8 @@ impl InnerNode {
         // maximum height of 50 will result in the possibility to allocate
         // (2^50 - 1) memory slots. Considering the imposed maximum height the
         // recursion is safe to use.
+        // It is safe adding 1 to the height as it can not be greater than 50
+        // hence no chance of overflowing.
         if (self.height + 1) > 50 {
             return Err(Error::Overflow);
         }
@@ -341,7 +349,10 @@ impl InnerNode {
                 // Search the node in the interval tree that contains the
                 // desired starting address.
                 let node = self
-                    .search_superset(&RangeInclusive::new(start_address, start_address + 1)?)
+                    .search_superset(&RangeInclusive::new(
+                        start_address,
+                        start_address.checked_add(1).ok_or(Error::Overflow)?,
+                    )?)
                     .ok_or(Error::ResourceNotAvailable)?;
                 let end_address = start_address
                     .checked_add(constraint.size().checked_sub(1).ok_or(Error::Underflow)?)
@@ -441,11 +452,18 @@ impl InnerNode {
         let range_start = match constraint.policy {
             AllocPolicy::FirstMatch => align_up(node_key.start(), constraint.align)?,
             AllocPolicy::LastMatch => {
+                // This operation can not underflow as we check at the beginning
+                // of this method that the requested node fits in the selected
+                // node. The subsequent addition can not overflow as well since
+                // we already subtract the desired length (e.g. Give a range
+                // [x, u64::MAX] and we want to allocate a node with size Y and
+                // AllocPolicy::LastMatch computing the candidate address will
+                // not overflow as we subtract from u64::MAX Y in the step above).
                 let candidate_address = node_key
                     .end()
                     .checked_sub(constraint.size())
-                    .ok_or(Error::Overflow)?
-                    + 1;
+                    .ok_or(Error::Underflow)
+                    .and_then(|addr| addr.checked_add(1).ok_or(Error::Overflow))?;
                 let aligned_address = align_down(candidate_address, constraint.align)?;
                 if aligned_address < self.key.start() {
                     return Err(Error::UnalignedAddress);
@@ -532,7 +550,14 @@ impl IntervalTree {
         let node_key = node.key;
         // Create a new RangeInclusive starting at an address that is aligned to the
         // value specified by constraint.
-        let result = RangeInclusive::new(range.start(), range.start() + constraint.size - 1)?;
+        let result = RangeInclusive::new(
+            range.start(),
+            range
+                .start()
+                .checked_add(constraint.size())
+                .ok_or(Error::Overflow)
+                .and_then(|addr| addr.checked_sub(1).ok_or(Error::Underflow))?,
+        )?;
 
         // Allocate a resource from the node, no need to split the candidate node.
         if node_key.start() == result.start() && node_key.len() == constraint.size {
@@ -549,7 +574,10 @@ impl IntervalTree {
         self.delete(&node_key)?;
         if result.start > node_key.start() {
             self.insert(
-                RangeInclusive::new(node_key.start(), result.start() - 1)?,
+                RangeInclusive::new(
+                    node_key.start(),
+                    result.start().checked_sub(1).ok_or(Error::Overflow)?,
+                )?,
                 NodeState::Free,
             )?;
         }
@@ -557,7 +585,10 @@ impl IntervalTree {
         self.insert(result, NodeState::Allocated)?;
         if result.end() < node_key.end() {
             self.insert(
-                RangeInclusive::new(result.end() + 1, node_key.end())?,
+                RangeInclusive::new(
+                    result.end().checked_add(1).ok_or(Error::Overflow)?,
+                    node_key.end(),
+                )?,
                 NodeState::Free,
             )?;
         }
@@ -572,9 +603,10 @@ impl IntervalTree {
         // If the deleted RangeInclusive did not start at 0 we try to find range that
         // are placed to its left so we can merge them together.
         if range.start() > 0 {
-            if let Some(node) =
-                self.search_superset(&RangeInclusive::new(range.start() - 2, range.start() - 1)?)
-            {
+            if let Some(node) = self.search_superset(&RangeInclusive::new(
+                range.start().checked_sub(2).ok_or(Error::Underflow)?,
+                range.start().checked_sub(1).ok_or(Error::Underflow)?,
+            )?) {
                 if node.node_state == NodeState::Free {
                     range = RangeInclusive::new(node.key.start(), range.end())?;
                 }
@@ -583,9 +615,10 @@ impl IntervalTree {
         // If the deleted range did not end at u64::MAX we try to find ranges
         // that are placed to its left so we can merge them together.
         if range.end() < std::u64::MAX {
-            if let Some(node) =
-                self.search_superset(&RangeInclusive::new(range.end(), range.end() + 1)?)
-            {
+            if let Some(node) = self.search_superset(&RangeInclusive::new(
+                range.end(),
+                range.end().checked_add(1).ok_or(Error::Overflow)?,
+            )?) {
                 if node.node_state == NodeState::Free {
                     range = RangeInclusive::new(range.start(), node.key.end())?;
                 }
@@ -596,14 +629,20 @@ impl IntervalTree {
         // the left node as it now belongs to a bigger RangeInclusive that will be
         // inserted in the tree.
         if range.start() < key.start() {
-            self.delete(&RangeInclusive::new(range.start(), key.start() - 1)?)?;
+            self.delete(&RangeInclusive::new(
+                range.start(),
+                key.start().checked_sub(1).ok_or(Error::Underflow)?,
+            )?)?;
         }
 
         // If we merged the freed node to the one on its right we should delete
         // the right node as it now belongs to a bigger RangeInclusive that will be
         // inserted in the tree.
         if range.end() > key.end() {
-            self.delete(&RangeInclusive::new(key.end() + 1, range.end())?)?;
+            self.delete(&RangeInclusive::new(
+                key.end().checked_add(1).ok_or(Error::Overflow)?,
+                range.end(),
+            )?)?;
         }
         // Insert in the tree the new created range.
         self.insert(range, NodeState::Free)?;
@@ -924,5 +963,19 @@ mod tests {
                 .unwrap(),
             left_child
         );
+    }
+
+    #[test]
+    fn test_integer_wrapping() {
+        let mut tree =
+            IntervalTree::new(RangeInclusive::new(0xFFFFFFFFFFFFFEFF, 0xFFFFFFFFFFFFFFFF).unwrap());
+        let constraint = Constraint::new(0x2)
+            .unwrap()
+            .set_align(0xFFFFFFFFFFFFFFFF)
+            .unwrap()
+            .set_policy(AllocPolicy::ExactMatch(0xFFFFFFFFFFFFFFFF))
+            .unwrap();
+        let res = tree.allocate(constraint);
+        assert_eq!(res.unwrap_err(), Error::Overflow);
     }
 }
