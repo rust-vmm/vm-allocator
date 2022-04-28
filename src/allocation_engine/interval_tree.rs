@@ -785,6 +785,24 @@ mod tests {
             .insert(RangeInclusive::new(0x100, 0x110).unwrap(), NodeState::Free)
             .unwrap();
         tree = tree
+            .insert(RangeInclusive::new(0x350, 0x360).unwrap(), NodeState::Free)
+            .unwrap();
+        tree = tree
+            .insert(RangeInclusive::new(0x340, 0x34F).unwrap(), NodeState::Free)
+            .unwrap();
+        tree = tree
+            .insert(RangeInclusive::new(0x311, 0x33F).unwrap(), NodeState::Free)
+            .unwrap();
+        tree = tree.delete_root().unwrap();
+        assert!(is_balanced(Some(tree)));
+        tree = Box::new(InnerNode::new(
+            RangeInclusive::new(0x300, 0x310).unwrap(),
+            NodeState::Allocated,
+        ));
+        tree = tree
+            .insert(RangeInclusive::new(0x100, 0x110).unwrap(), NodeState::Free)
+            .unwrap();
+        tree = tree
             .insert(RangeInclusive::new(0x90, 0x9F).unwrap(), NodeState::Free)
             .unwrap();
         assert!(is_balanced(Some(tree.clone())));
