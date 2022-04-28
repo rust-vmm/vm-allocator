@@ -259,9 +259,12 @@ mod tests {
         );
         // Now we try an allocation that should succeed.
         assert_eq!(
-            pool.allocate(0x800, 0x100, AllocPolicy::FirstMatch)
+            pool.allocate(0x4FE, 0x100, AllocPolicy::ExactMatch(0x500))
                 .unwrap(),
-            RangeInclusive::new(0x0, 0x7FF).unwrap()
+            RangeInclusive::new(0x500, 0x9FD).unwrap()
         );
+        assert!(pool
+            .free(&RangeInclusive::new(0x500, 0x9FD).unwrap())
+            .is_ok());
     }
 }
