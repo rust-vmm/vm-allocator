@@ -81,6 +81,16 @@ mod tests {
         let res = pool
             .allocate(0x1000, 0x1000, AllocPolicy::ExactMatch(0x1000))
             .unwrap();
+        assert_eq!(
+            pool.allocate(0x0, 0x1000, AllocPolicy::FirstMatch)
+                .unwrap_err(),
+            Error::InvalidSize(0x0)
+        );
+        assert_eq!(
+            pool.allocate(0x1000, 0x1000, AllocPolicy::ExactMatch(0x3))
+                .unwrap_err(),
+            Error::UnalignedAddress
+        );
         assert_eq!(res, RangeInclusive::new(0x1000, 0x1FFF).unwrap());
         let res = pool
             .allocate(0x1000, 0x1000, AllocPolicy::ExactMatch(0x0))
