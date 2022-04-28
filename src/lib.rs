@@ -259,4 +259,17 @@ mod tests {
         let range = RangeInclusive::new(0, u64::MAX);
         assert_eq!(range.unwrap_err(), Error::InvalidRange(0, u64::MAX));
     }
+
+    #[test]
+    fn constraint_getter() {
+        let bad_constraint = Constraint::new(0x1000)
+            .unwrap()
+            .set_policy(AllocPolicy::ExactMatch(0xC))
+            .unwrap()
+            .set_align(0x1000);
+        assert_eq!(bad_constraint.unwrap_err(), Error::UnalignedAddress);
+        let constraint = Constraint::new(0x1000).unwrap().set_align(0x1000).unwrap();
+        assert_eq!(constraint.align(), 0x1000);
+        assert_eq!(constraint.size(), 0x1000);
+    }
 }
