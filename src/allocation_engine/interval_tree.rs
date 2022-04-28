@@ -616,8 +616,8 @@ impl IntervalTree {
         // that are placed to its left so we can merge them together.
         if range.end() < std::u64::MAX {
             if let Some(node) = self.search_superset(&RangeInclusive::new(
-                range.end(),
                 range.end().checked_add(1).ok_or(Error::Overflow)?,
+                range.end().checked_add(2).ok_or(Error::Overflow)?,
             )?) {
                 if node.node_state == NodeState::Free {
                     range = RangeInclusive::new(range.start(), node.key.end())?;
