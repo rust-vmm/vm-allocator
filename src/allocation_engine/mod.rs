@@ -4,4 +4,4 @@
 
 mod interval_tree;
 
-pub use interval_tree::{align_down, align_up, IntervalTree, NodeState};
+pub(crate) use interval_tree::{IntervalTree, NodeState};

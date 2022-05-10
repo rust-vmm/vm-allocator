@@ -55,7 +55,7 @@ impl NodeState {
 
 /// Internal tree node to implement interval tree.
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
-pub struct InnerNode {
+pub(crate) struct InnerNode {
     /// Interval handled by this node.
     key: RangeInclusive,
     /// NodeState, can be Free or Allocated.

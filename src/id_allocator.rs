@@ -11,12 +11,13 @@ use crate::Error;
 use crate::Result;
 use std::collections::BTreeSet;
 
-/// Internal representation of IdAllocator. Contains the ends of the interval
-/// that is managed, a field that points at the next available ID, and a
-/// BTreeSet used to store the released IDs. The reason we chose a
-/// BTreeSet is that the average complexity for deletion and insertion is
-/// O(logN) compared to Vec for example, another benefit is that the entries
-/// are sorted so we will always use the first available ID.
+/// An unique ID allocator that allows management of IDs in a given interval.
+// Internal representation of IdAllocator. Contains the ends of the interval
+// that is managed, a field that points at the next available ID, and a
+// BTreeSet used to store the released IDs. The reason we chose a
+// BTreeSet is that the average complexity for deletion and insertion is
+// O(logN) compared to Vec for example, another benefit is that the entries
+// are sorted so we will always use the first available ID.
 #[derive(Debug)]
 pub struct IdAllocator {
     // Beginning of the range of IDs that we want to manage.

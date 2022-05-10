@@ -17,8 +17,10 @@ use crate::{AllocPolicy, Constraint, Error, RangeInclusive, Result};
 // used for memory slots management. The reason we chose to use an interval tree
 // is that the average complexity for deletion and insertion is O(log N) and for
 // searching a node is O(N).
-/// Defines strategies for address space management. It exposes methods to
-/// allocate and free memory slots.
+/// An address space allocator.
+///
+/// The `AddressAllocator` manages an address space by exporting functionality to reserve and
+/// free address ranges based on a user defined [Allocation Policy](enum.AllocPolicy.html).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct AddressAllocator {
     // Address space that we want to manage.
@@ -44,7 +46,7 @@ impl AddressAllocator {
         })
     }
 
-    /// Allocates a new aligned memory slot.
+    /// Allocates a new aligned memory slot. Returns the allocated range in case of success.
     pub fn allocate(
         &mut self,
         size: u64,

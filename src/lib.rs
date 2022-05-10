@@ -17,7 +17,7 @@ use std::cmp::min;
 use std::result;
 use thiserror::Error;
 
-/// Error type for IdAllocator usage.
+/// Errors that can be returned while managing address ranges or IDs.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
 pub enum Error {
     /// Management operations on desired resource resulted in overflow.
@@ -63,9 +63,9 @@ pub enum Error {
 /// Wrapper over std::result::Result
 pub type Result<T> = result::Result<T, Error>;
 
-/// A closed interval range [start, end] used to describe a memory slot that
-/// will be assigned to a device by the VMM. This structure represents the key
-/// of the Node object in the interval tree implementation.
+/// A closed interval range [start, end].
+/// The range describes a memory slot which is assigned by the VMM to a device.
+// This structure represents the key of the Node object in the interval tree implementation.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Ord, Debug)]
 pub struct RangeInclusive {
     /// Lower boundary of the interval.
@@ -76,7 +76,7 @@ pub struct RangeInclusive {
 
 #[allow(clippy::len_without_is_empty)]
 impl RangeInclusive {
-    /// Create a new RangeInclusive object.
+    /// Creates a new RangeInclusive.
     pub fn new(start: u64, end: u64) -> Result<Self> {
         // The length of the interval [0, u64::MAX] is u64::MAX + 1 which does
         // not fit in a u64::MAX, hence we return `Error::InvalidRange` when
@@ -87,33 +87,33 @@ impl RangeInclusive {
         Ok(RangeInclusive { start, end })
     }
 
-    /// Get length of the range.
+    /// Returns the length of the range.
     pub fn len(&self) -> u64 {
         self.end - self.start + 1
     }
 
-    /// Check whether two RangeInclusive objects overlap with each other.
+    /// Returns true if the regions overlap.
     pub fn overlaps(&self, other: &RangeInclusive) -> bool {
         max(self.start, other.start) <= min(self.end, other.end)
     }
 
-    /// Check whether the key is fully covered.
+    /// Returns true if the current range contains the range passed as a parameter.
     pub fn contains(&self, other: &RangeInclusive) -> bool {
         self.start <= other.start && self.end >= other.end
     }
 
-    /// Get the lower boundary of the range.
+    /// Returns the lower boundary of the range.
     pub fn start(&self) -> u64 {
         self.start
     }
 
-    /// Get the upper boundary of the range.
+    /// Returns the upper boundary of the range.
     pub fn end(&self) -> u64 {
         self.end
     }
 }
 
-/// Struct to describe resource allocation constraints.
+/// A resource allocation constraint.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Constraint {
     /// Size to allocate.
@@ -125,7 +125,7 @@ pub struct Constraint {
 }
 
 impl Constraint {
-    /// Create a new constraint object with default settings.
+    /// Creates a new constraint object using default settings.
     pub fn new(size: u64) -> Result<Self> {
         Ok(Constraint {
             size,
@@ -145,7 +145,7 @@ impl Constraint {
         Ok(self)
     }
 
-    /// Get the alignment constraint
+    /// Returns the alignment constraint.
     pub fn align(self) -> u64 {
         self.align
     }
@@ -161,7 +161,7 @@ impl Constraint {
         Ok(self)
     }
 
-    /// Get the size constraint
+    /// Returns the size constraint.
     pub fn size(self) -> u64 {
         self.size
     }
