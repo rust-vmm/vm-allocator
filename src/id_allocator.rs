@@ -33,7 +33,7 @@ impl IdAllocator {
     /// Creates a new instance of IdAllocator that will be used to manage the
     /// allocation and release of ids from the interval specified by
     /// `range_base` and `range_end`
-    pub fn new(range_base: u32, range_end: u32) -> std::result::Result<Self, Error> {
+    pub fn new(range_base: u32, range_end: u32) -> Result<Self> {
         if range_end < range_base {
             return Err(Error::InvalidRange(range_base.into(), range_end.into()));
         }
