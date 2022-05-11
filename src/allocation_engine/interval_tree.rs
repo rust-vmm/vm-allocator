@@ -985,14 +985,16 @@ mod tests {
 
     #[test]
     fn test_integer_wrapping() {
-        let mut tree =
-            IntervalTree::new(RangeInclusive::new(0xFFFFFFFFFFFFFEFF, 0xFFFFFFFFFFFFFFFF).unwrap());
-        let constraint = Constraint::new(0x2)
-            .unwrap()
-            .set_align(0xFFFFFFFFFFFFFFFF)
-            .unwrap()
-            .set_policy(AllocPolicy::ExactMatch(0xFFFFFFFFFFFFFFFF))
-            .unwrap();
+        let mut tree = IntervalTree::new(RangeInclusive::new(0x1, 0xFFFFFFFFFFFFFFFF).unwrap());
+
+        // We have to create a valid constraint (that has an alignment that is a power of 2).
+        // In case the size + the start address would overflow, we want to make sure the appropriate error is returned.
+        let constraint = Constraint::new(
+            0x8000000000000000,
+            0x8000000000000000,
+            AllocPolicy::ExactMatch(0x8000000000000000),
+        )
+        .unwrap();
         let res = tree.allocate(constraint);
         assert_eq!(res.unwrap_err(), Error::Overflow);
     }

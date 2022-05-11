@@ -17,6 +17,9 @@ use std::cmp::min;
 use std::result;
 use thiserror::Error;
 
+/// Default alignment that can be used for creating a `Constraint`.
+pub const DEFAULT_CONSTRAINT_ALIGN: u64 = 4;
+
 /// Errors that can be returned while managing address ranges or IDs.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
 pub enum Error {
@@ -125,40 +128,41 @@ pub struct Constraint {
 }
 
 impl Constraint {
-    /// Creates a new constraint object using default settings.
-    pub fn new(size: u64) -> Result<Self> {
-        Ok(Constraint {
-            size,
-            align: 4,
-            policy: AllocPolicy::default(),
-        })
-    }
+    /// Creates a new constraint based on the passed configuration.
+    ///
+    /// When the `ExactMatch` policy is used, the start address MUST be aligned to the
+    /// alignment passed as a parameter.
+    ///
+    /// # Arguments:
+    /// - `size`: size to allocate.
+    /// - `align`: alignment to be used for the allocated resources.
+    ///            Valid alignments are a power of 2.
+    /// - `policy`: allocation policy.
+    pub fn new(size: u64, align: u64, policy: AllocPolicy) -> Result<Self> {
+        if size == 0 {
+            return Err(Error::InvalidSize(size));
+        }
 
-    /// Set the alignment constraint.
-    pub fn set_align(mut self, align: u64) -> Result<Self> {
-        if let AllocPolicy::ExactMatch(start_address) = self.policy {
+        if !align.is_power_of_two() || align == 0 {
+            return Err(Error::InvalidAlignment);
+        }
+
+        if let AllocPolicy::ExactMatch(start_address) = policy {
             if start_address % align != 0 {
                 return Err(Error::UnalignedAddress);
             }
         }
-        self.align = align;
-        Ok(self)
+
+        Ok(Constraint {
+            size,
+            align,
+            policy,
+        })
     }
 
     /// Returns the alignment constraint.
     pub fn align(self) -> u64 {
         self.align
-    }
-
-    /// Set the allocation policy.
-    pub fn set_policy(mut self, policy: AllocPolicy) -> Result<Self> {
-        if let AllocPolicy::ExactMatch(start_address) = policy {
-            if start_address % self.align != 0 {
-                return Err(Error::UnalignedAddress);
-            }
-        }
-        self.policy = policy;
-        Ok(self)
     }
 
     /// Returns the size constraint.
@@ -262,13 +266,9 @@ mod tests {
 
     #[test]
     fn constraint_getter() {
-        let bad_constraint = Constraint::new(0x1000)
-            .unwrap()
-            .set_policy(AllocPolicy::ExactMatch(0xC))
-            .unwrap()
-            .set_align(0x1000);
+        let bad_constraint = Constraint::new(0x1000, 0x1000, AllocPolicy::ExactMatch(0xC));
         assert_eq!(bad_constraint.unwrap_err(), Error::UnalignedAddress);
-        let constraint = Constraint::new(0x1000).unwrap().set_align(0x1000).unwrap();
+        let constraint = Constraint::new(0x1000, 0x1000, AllocPolicy::default()).unwrap();
         assert_eq!(constraint.align(), 0x1000);
         assert_eq!(constraint.size(), 0x1000);
     }

@@ -47,22 +47,22 @@ impl AddressAllocator {
     }
 
     /// Allocates a new aligned memory slot. Returns the allocated range in case of success.
+    ///
+    /// When the `ExactMatch` policy is used, the start address MUST be aligned to the
+    /// alignment passed as a parameter.
+    ///
+    /// # Arguments:
+    /// - `size`: size to allocate.
+    /// - `alignment`: alignment to be used for the allocated resources.
+    ///            Valid alignments are a power of 2.
+    /// - `policy`: allocation policy.
     pub fn allocate(
         &mut self,
         size: u64,
         alignment: u64,
-        alloc_policy: AllocPolicy,
+        policy: AllocPolicy,
     ) -> Result<RangeInclusive> {
-        if size == 0 {
-            return Err(Error::InvalidSize(size));
-        }
-
-        if !alignment.is_power_of_two() || alignment == 0 {
-            return Err(Error::InvalidAlignment);
-        }
-        let constraint = Constraint::new(size)?
-            .set_align(alignment)?
-            .set_policy(alloc_policy)?;
+        let constraint = Constraint::new(size, alignment, policy)?;
         self.interval_tree.allocate(constraint)
     }
 
