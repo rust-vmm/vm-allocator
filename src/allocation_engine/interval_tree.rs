@@ -2,8 +2,9 @@
 // Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2
 
-use crate::{AllocPolicy, Constraint, Error, RangeInclusive, Result};
 use std::cmp::{max, Ordering};
+
+use crate::{AllocPolicy, Constraint, Error, RangeInclusive, Result};
 
 /// Returns the first multiple of `alignment` that is lower or equal to the
 /// specified address. This method works only for alignment values that are a
