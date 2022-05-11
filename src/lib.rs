@@ -9,18 +9,16 @@ mod address_allocator;
 mod allocation_engine;
 mod id_allocator;
 
-pub use crate::address_allocator::AddressAllocator;
-use crate::allocation_engine::NodeState;
-pub use crate::id_allocator::IdAllocator;
-use std::cmp::max;
-use std::cmp::min;
-use std::result;
+use std::{cmp::max, cmp::min, result};
 use thiserror::Error;
+
+use crate::allocation_engine::NodeState;
+pub use crate::{address_allocator::AddressAllocator, id_allocator::IdAllocator};
 
 /// Default alignment that can be used for creating a `Constraint`.
 pub const DEFAULT_CONSTRAINT_ALIGN: u64 = 4;
 
-/// Errors that can be returned while managing address ranges or IDs.
+/// Error type for IdAllocator usage.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
 pub enum Error {
     /// Management operations on desired resource resulted in overflow.

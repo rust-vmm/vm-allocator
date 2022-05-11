@@ -7,8 +7,7 @@
 //! This module implements an allocation strategies for all resource types
 //! that can be abstracted to an integer.
 
-use crate::Error;
-use crate::Result;
+use crate::{Error, Result};
 use std::collections::BTreeSet;
 
 /// An unique ID allocator that allows management of IDs in a given interval.
