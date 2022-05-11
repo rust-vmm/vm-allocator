@@ -1,6 +1,76 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 //! Manages system resources that can be allocated to VMs and their devices.
+//!
+//! # Example
+//!
+//! Depending on the use case of the VMM, both the `IDAllocator` and the `AddressAllocator`
+//! can be used. In the example below we assume that the `IDAllocator` is used for allocating
+//! unique identifiers for VM devices. We use the address allocator for allocating MMIO ranges
+//! for virtio devices.
+//!
+//! In the example below we use constants that are typical for the x86 platform, but this has no
+//! impact on the code actually working on aarch64.
+//!
+//! ```rust
+//! use std::collections::HashMap;
+//! use std::process::id;
+//! use vm_allocator::{AddressAllocator, AllocPolicy, Error, IdAllocator, RangeInclusive, Result};
+//!
+//! const FIRST_ADDR_PAST_32BITS: u64 = 1 << 32;
+//! const MEM_32BIT_GAP_SIZE: u64 = 768 << 20;
+//! const MMIO_MEM_START: u64 = FIRST_ADDR_PAST_32BITS - MEM_32BIT_GAP_SIZE;
+//! const PAGE_SIZE: u64 = 0x1000;
+//!
+//! struct DeviceManager {
+//!     id_allocator: IdAllocator,
+//!     mmio_allocator: AddressAllocator,
+//!     slots: HashMap<u32, RangeInclusive>,
+//! }
+//!
+//! #[derive(Clone, Copy)]
+//! struct DeviceSlot {
+//!     id: u32,
+//!     mmio_range: RangeInclusive,
+//! }
+//!
+//! impl DeviceManager {
+//!     pub fn new() -> Result<Self> {
+//!         Ok(DeviceManager {
+//!             id_allocator: IdAllocator::new(0, 100)?,
+//!             mmio_allocator: AddressAllocator::new(MMIO_MEM_START, MEM_32BIT_GAP_SIZE)?,
+//!             slots: HashMap::new(),
+//!         })
+//!     }
+//!
+//!     pub fn reserve_device_slot(&mut self) -> Result<DeviceSlot> {
+//!         // We're reserving the first available address that is aligned to the page size.
+//!         // For each device we reserve one page of addresses.
+//!         let mmio_range =
+//!             self.mmio_allocator
+//!                 .allocate(PAGE_SIZE, PAGE_SIZE, AllocPolicy::FirstMatch)?;
+//!         let slot = DeviceSlot {
+//!             id: self.id_allocator.allocate_id()?,
+//!             mmio_range,
+//!         };
+//!         self.slots.insert(slot.id, slot.mmio_range);
+//!         Ok(slot)
+//!     }
+//!
+//!     // Free the device slot corresponding to the passed device ID.
+//!     pub fn free_device_slot(&mut self, id: u32) -> Result<()> {
+//!         let mmio_range = self.slots.get(&id).ok_or(Error::NeverAllocated(id))?;
+//!         let _ = self.id_allocator.free_id(id)?;
+//!         self.mmio_allocator.free(mmio_range)
+//!     }
+//! }
+//!
+//! # fn main() {
+//! #     let mut dm = DeviceManager::new().unwrap();
+//! #    let slot = dm.reserve_device_slot().unwrap();
+//! #    dm.free_device_slot(slot.id).unwrap();
+//! # }
+//! ```
 
 #![deny(missing_docs)]
 
