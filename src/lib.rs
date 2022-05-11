@@ -115,6 +115,30 @@ impl RangeInclusive {
 }
 
 /// A resource allocation constraint.
+///
+/// # Example
+///
+/// ```rust
+/// use vm_allocator::{AllocPolicy, Constraint, Error, IdAllocator, DEFAULT_CONSTRAINT_ALIGN};
+///
+/// let constraint =
+///     Constraint::new(0x4, DEFAULT_CONSTRAINT_ALIGN, AllocPolicy::FirstMatch).unwrap();
+/// assert_eq!(constraint.size(), 0x4);
+/// assert_eq!(constraint.align(), 0x4);
+///
+/// // Alignments need to be a power of 2, otherwise an error is returned.
+/// assert_eq!(
+///     Constraint::new(0x4, 0x3, AllocPolicy::LastMatch).unwrap_err(),
+///     Error::InvalidAlignment
+/// );
+///
+/// // When using the ExactMatch policy, the start address must also be aligned, otherwise
+/// // an error is returned.
+/// assert_eq!(
+///     Constraint::new(0x4, 0x4, AllocPolicy::ExactMatch(0x3)).unwrap_err(),
+///     Error::UnalignedAddress
+/// );
+/// ```
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Constraint {
     /// Size to allocate.
