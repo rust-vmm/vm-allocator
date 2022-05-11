@@ -136,6 +136,25 @@ pub type Result<T> = result::Result<T, Error>;
 
 /// A closed interval range [start, end].
 /// The range describes a memory slot which is assigned by the VMM to a device.
+///
+/// # Example
+///
+/// ```rust
+/// use vm_allocator::RangeInclusive;
+///
+/// let r = RangeInclusive::new(0x0, 0x100).unwrap();
+/// assert_eq!(r.len(), 0x101);
+/// assert_eq!(r.start(), 0x0);
+/// assert_eq!(r.end(), 0x100);
+///
+/// // Check if a region contains another region.
+/// let other = RangeInclusive::new(0x50, 0x80).unwrap();
+/// assert!(r.contains(&other));
+///
+/// // Check if a region overlaps with another one.
+/// let other = RangeInclusive::new(0x99, 0x150).unwrap();
+/// assert!(r.overlaps(&other));
+/// ```
 // This structure represents the key of the Node object in the interval tree implementation.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Ord, Debug)]
 pub struct RangeInclusive {
