@@ -5,32 +5,35 @@ that are needed by the VMM during the lifetime of a virtual machine. Possible
 resource types that a VMM could allocate using vm-allocator are MMIO addresses,
 PIO addresses, GSI numbers, device IDs.
 
-We have decided to have two allocator implementations, one for resources that can
-be abstracted to an integer and another allocator for addresses. We chose
-to have a separate allocator for addresses to add more semantic meaning to this
-resource (i.e. it needs information like alignment which for resources like
-interrupt numbers are not needed). The main components are:
+This crate exports 2 allocators: one for resources that can be represented as
+integers, and one for addresses. The reason behind having two separate
+allocators is the need to add semantic meaning to the address allocator, by
+specifying configuration parameters such as the alignment that do not make
+sense in the context of IDs.
 
+The main components of the crate are:
 - `IDAllocator` - which should be used for all resources that can be reduced to
-an integer type.
-- `AddressAllocator` - which should be used to allocate address ranges in different
-address spaces. This component is a wrapper over `IntervalTree` that adds semantics
-to address ranges.
+  an integer type.
+- `AddressAllocator` - which should be used to allocate address ranges in
+  different address spaces. This component is a wrapper over `IntervalTree`
+  that adds semantics to address ranges. More details about the inner
+  presentation of the address allocator can be found in the
+  [Design Document](src/allocation_engine/DESIGN.md).
 
 ## ID Allocator
 
 ### Design
 
-This allocator should be used to allocate resources that can be reduced to an integer
-type like legacy GSI numbers or KVM memory slot IDs. The
+This allocator should be used to allocate resources that can be reduced to an
+integer type like legacy GSI numbers or KVM memory slot IDs. The
 characteristics of such a resource are represented by the `IdAllocator` struct.
 
-The struct that defines the IdAllocator contains the ends of the interval that is
-managed, a field that points at the next available ID and a BTreeSet that is used
-to store the released IDs. We choose to use a BTreeSet because the average
-complexity for deletion and insertion is O(log N) compared to Vec for example,
-another benefit is that the entries are sorted so, we will always use the first
-available ID.
+The struct that defines the `IdAllocator` contains the end of the interval that
+is managed, a field that points at the next available ID and a `BTreeSet` that
+is used to store the released IDs. The reason for using a `BTreeSet` is that
+the average complexity for deletion and insertion is `O(log N)`, offering a
+better performance when compared to Vector for example. The entries are sorted,
+so we will always use the first available ID.
 
 #### Allocation policy
 
@@ -39,36 +42,7 @@ do that we first search in the BTreeSet for any ID that was released and if we
 cannot find anything there we return the next ID from the range that was never
 allocated.
 
-```rust
-/// Id allocator representation.
-pub struct IdAllocator {
-    // Begining of the range of IDs that we want to manage.
-    range_base: u32,
-    // First available id that was never allocated. 
-    next_id: Option<u32>,
-    // End of the range of IDs that we want to manage.
-    range_end: u32,
-    // Set of all freed ids that can be reused at subsequent allocations.
-    freed_ids: BTreeSet<u32>,
-}
-```
-
 The `IdAllocator` struct implements methods for allocating and releasing IDs.
-
-```rust
-impl IdAllocator {
-    /// Creates a new instance of IdAllocator that will be used to manage the
-    /// allocation and release of ids from the interval specified by
-    /// `range_base` and `range_max`
-    pub fn new(range_base: u32, range_end: u32) -> std::result::Result<Self, Error> { }
-
-    /// Allocate an ID from the managed ranged.
-    pub fn allocate_id(&mut self) -> Result { }
-
-    /// Frees an id from the managed range.
-    pub fn free_id(&mut self, id: u32) -> Result { }
-}
-```
 
 ### Usage
 
@@ -80,8 +54,8 @@ vm-allocator = "*"
 ````
 
 Then add extern crate vm-allocator; to projects crate root.
-The VMM using this crate should instantiate an IdAllocator object for each resource
-type they want to manage.
+The VMM using this crate should instantiate an IdAllocator object for each
+resource type they want to manage.
 
 ## License
 
