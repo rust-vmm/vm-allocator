@@ -1,5 +1,8 @@
 # vm-allocator
 
+[![crates.io](https://img.shields.io/crates/v/vm-allocator)](https://crates.io/crates/vm-allocator)
+[![docs.rs](https://img.shields.io/docsrs/vm-allocator)](https://docs.rs/vm-allocator/)
+
 `vm-allocator` is a crate designed to provide allocation and release strategies
 that are needed by the VMM during the lifetime of a virtual machine. Possible
 resource types that a VMM could allocate using vm-allocator are MMIO addresses,
