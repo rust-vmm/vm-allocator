@@ -28,7 +28,7 @@
 //!     slots: HashMap<u32, RangeInclusive>,
 //! }
 //!
-//! #[derive(Clone, Copy)]
+//! #[derive(Clone)]
 //! struct DeviceSlot {
 //!     id: u32,
 //!     mmio_range: RangeInclusive,
@@ -53,7 +53,7 @@
 //!             id: self.id_allocator.allocate_id()?,
 //!             mmio_range,
 //!         };
-//!         self.slots.insert(slot.id, slot.mmio_range);
+//!         self.slots.insert(slot.id.clone(), slot.mmio_range.clone());
 //!         Ok(slot)
 //!     }
 //!
@@ -79,7 +79,11 @@ mod address_allocator;
 mod allocation_engine;
 mod id_allocator;
 
-use std::{cmp::max, cmp::min, result};
+use std::{
+    cmp::{max, min, Ordering},
+    ops::Deref,
+    result,
+};
 use thiserror::Error;
 
 use crate::allocation_engine::NodeState;
@@ -89,7 +93,7 @@ pub use crate::{address_allocator::AddressAllocator, id_allocator::IdAllocator};
 pub const DEFAULT_CONSTRAINT_ALIGN: u64 = 4;
 
 /// Error type for IdAllocator usage.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Error)]
 pub enum Error {
     /// Management operations on desired resource resulted in overflow.
     #[error("Management operations on desired resource resulted in overflow.")]
@@ -144,8 +148,8 @@ pub type Result<T> = result::Result<T, Error>;
 ///
 /// let r = RangeInclusive::new(0x0, 0x100).unwrap();
 /// assert_eq!(r.len(), 0x101);
-/// assert_eq!(r.start(), 0x0);
-/// assert_eq!(r.end(), 0x100);
+/// assert_eq!(*r.start(), 0x0);
+/// assert_eq!(*r.end(), 0x100);
 ///
 /// // Check if a region contains another region.
 /// let other = RangeInclusive::new(0x50, 0x80).unwrap();
@@ -156,12 +160,28 @@ pub type Result<T> = result::Result<T, Error>;
 /// assert!(r.overlaps(&other));
 /// ```
 // This structure represents the key of the Node object in the interval tree implementation.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Ord, Debug)]
-pub struct RangeInclusive {
-    /// Lower boundary of the interval.
-    start: u64,
-    /// Upper boundary of the interval.
-    end: u64,
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct RangeInclusive(std::ops::RangeInclusive<u64>);
+impl PartialOrd<Self> for RangeInclusive {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(match self.0.start().cmp(other.0.start()) {
+            Ordering::Equal => self.end().cmp(other.end()),
+            Ordering::Less => Ordering::Less,
+            Ordering::Greater => Ordering::Greater,
+        })
+    }
+}
+impl Ord for RangeInclusive {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+impl Deref for RangeInclusive {
+    type Target = std::ops::RangeInclusive<u64>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -174,32 +194,22 @@ impl RangeInclusive {
         if start >= end || (start == 0 && end == u64::MAX) {
             return Err(Error::InvalidRange(start, end));
         }
-        Ok(RangeInclusive { start, end })
+        Ok(RangeInclusive(start..=end))
     }
 
     /// Returns the length of the range.
     pub fn len(&self) -> u64 {
-        self.end - self.start + 1
+        self.end() - self.start() + 1
     }
 
     /// Returns true if the regions overlap.
     pub fn overlaps(&self, other: &RangeInclusive) -> bool {
-        max(self.start, other.start) <= min(self.end, other.end)
+        max(self.start(), other.start()) <= min(self.end(), other.end())
     }
 
     /// Returns true if the current range contains the range passed as a parameter.
     pub fn contains(&self, other: &RangeInclusive) -> bool {
-        self.start <= other.start && self.end >= other.end
-    }
-
-    /// Returns the lower boundary of the range.
-    pub fn start(&self) -> u64 {
-        self.start
-    }
-
-    /// Returns the upper boundary of the range.
-    pub fn end(&self) -> u64 {
-        self.end
+        self.start() <= other.start() && self.end() >= other.end()
     }
 }
 
@@ -365,8 +375,8 @@ mod tests {
     #[test]
     fn test_getters() {
         let range = RangeInclusive::new(3, 5).unwrap();
-        assert_eq!(range.start(), 3);
-        assert_eq!(range.end(), 5);
+        assert_eq!(*range.start(), 3);
+        assert_eq!(*range.end(), 5);
     }
 
     #[test]

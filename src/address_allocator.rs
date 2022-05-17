@@ -41,7 +41,7 @@ impl AddressAllocator {
             .ok_or(Error::Overflow)?;
         let aux_range = RangeInclusive::new(base, end)?;
         Ok(AddressAllocator {
-            address_space: aux_range,
+            address_space: aux_range.clone(),
             interval_tree: IntervalTree::new(aux_range),
         })
     }

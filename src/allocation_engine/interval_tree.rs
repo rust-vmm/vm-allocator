@@ -98,7 +98,7 @@ impl InnerNode {
     fn search_superset(&self, key: &RangeInclusive) -> Option<&InnerNode> {
         if self.key.contains(key) {
             Some(self)
-        } else if key.end < self.key.start {
+        } else if key.end() < self.key.start() {
             self.left
                 .as_ref()
                 .and_then(|node| node.search_superset(key))
@@ -283,7 +283,10 @@ impl InnerNode {
         match self.key.cmp(key) {
             Ordering::Equal => {
                 if self.node_state != NodeState::Free {
-                    return Err(Error::InvalidStateTransition(self.key, self.node_state));
+                    return Err(Error::InvalidStateTransition(
+                        self.key.clone(),
+                        self.node_state,
+                    ));
                 }
                 self.node_state = NodeState::Allocated;
                 Ok(())
@@ -448,10 +451,10 @@ impl InnerNode {
         if !self.node_state.is_free() || self.key.len() < constraint.size {
             return Err(Error::ResourceNotAvailable);
         }
-        let node_key = self.key;
+        let node_key = self.key.clone();
         // Get the starting address for the memory slot.
         let range_start = match constraint.policy {
-            AllocPolicy::FirstMatch => align_up(node_key.start(), constraint.align)?,
+            AllocPolicy::FirstMatch => align_up(*node_key.start(), constraint.align)?,
             AllocPolicy::LastMatch => {
                 // This operation can not underflow as we check at the beginning
                 // of this method that the requested node fits in the selected
@@ -466,7 +469,7 @@ impl InnerNode {
                     .ok_or(Error::Underflow)
                     .and_then(|addr| addr.checked_add(1).ok_or(Error::Overflow))?;
                 let aligned_address = align_down(candidate_address, constraint.align)?;
-                if aligned_address < self.key.start() {
+                if aligned_address < *self.key.start() {
                     return Err(Error::UnalignedAddress);
                 }
                 aligned_address
@@ -474,7 +477,7 @@ impl InnerNode {
             AllocPolicy::ExactMatch(_) => unreachable!(),
         };
         // Create the result range.
-        let key = RangeInclusive::new(range_start, self.key.end())?;
+        let key = RangeInclusive::new(range_start, *self.key.end())?;
         // Check if the desired memory slot does fit in the candidate node.
         if key.len() >= constraint.size() {
             return Ok(key);
@@ -548,11 +551,11 @@ impl IntervalTree {
         // root node.
         let root = self.root.as_ref().ok_or(Error::ResourceNotAvailable)?;
         let (node, range) = root.find_candidate(&constraint)?;
-        let node_key = node.key;
+        let node_key = node.key.clone();
         // Create a new RangeInclusive starting at an address that is aligned to the
         // value specified by constraint.
         let result = RangeInclusive::new(
-            range.start(),
+            *range.start(),
             range
                 .start()
                 .checked_add(constraint.size())
@@ -573,22 +576,22 @@ impl IntervalTree {
         // actually the requested memory slot. The last node will have the
         // state NodeState::Free and is what is left from the old node.
         self.delete(&node_key)?;
-        if result.start > node_key.start() {
+        if result.start() > node_key.start() {
             self.insert(
                 RangeInclusive::new(
-                    node_key.start(),
+                    *node_key.start(),
                     result.start().checked_sub(1).ok_or(Error::Overflow)?,
                 )?,
                 NodeState::Free,
             )?;
         }
 
-        self.insert(result, NodeState::Allocated)?;
+        self.insert(result.clone(), NodeState::Allocated)?;
         if result.end() < node_key.end() {
             self.insert(
                 RangeInclusive::new(
                     result.end().checked_add(1).ok_or(Error::Overflow)?,
-                    node_key.end(),
+                    *node_key.end(),
                 )?,
                 NodeState::Free,
             )?;
@@ -599,29 +602,29 @@ impl IntervalTree {
     /// Free an allocated range.
     pub fn free(&mut self, key: &RangeInclusive) -> Result<()> {
         self.delete(key)?;
-        let mut range = *key;
+        let mut range = key.clone();
 
         // If the deleted RangeInclusive did not start at 0 we try to find range that
         // are placed to its left so we can merge them together.
-        if range.start() > 0 {
+        if *range.start() > 0 {
             if let Some(node) = self.search_superset(&RangeInclusive::new(
                 range.start().checked_sub(2).ok_or(Error::Underflow)?,
                 range.start().checked_sub(1).ok_or(Error::Underflow)?,
             )?) {
                 if node.node_state == NodeState::Free {
-                    range = RangeInclusive::new(node.key.start(), range.end())?;
+                    range = RangeInclusive::new(*node.key.start(), *range.end())?;
                 }
             }
         }
         // If the deleted range did not end at u64::MAX we try to find ranges
         // that are placed to its left so we can merge them together.
-        if range.end() < std::u64::MAX {
+        if *range.end() < std::u64::MAX {
             if let Some(node) = self.search_superset(&RangeInclusive::new(
                 range.end().checked_add(1).ok_or(Error::Overflow)?,
                 range.end().checked_add(2).ok_or(Error::Overflow)?,
             )?) {
                 if node.node_state == NodeState::Free {
-                    range = RangeInclusive::new(range.start(), node.key.end())?;
+                    range = RangeInclusive::new(*range.start(), *node.key.end())?;
                 }
             }
         }
@@ -631,7 +634,7 @@ impl IntervalTree {
         // inserted in the tree.
         if range.start() < key.start() {
             self.delete(&RangeInclusive::new(
-                range.start(),
+                *range.start(),
                 key.start().checked_sub(1).ok_or(Error::Underflow)?,
             )?)?;
         }
@@ -642,7 +645,7 @@ impl IntervalTree {
         if range.end() > key.end() {
             self.delete(&RangeInclusive::new(
                 key.end().checked_add(1).ok_or(Error::Overflow)?,
-                range.end(),
+                *range.end(),
             )?)?;
         }
         // Insert in the tree the new created range.
@@ -689,7 +692,9 @@ mod tests {
         ));
         let left_child = InnerNode::new(RangeInclusive::new(0x90, 0x99).unwrap(), NodeState::Free);
 
-        tree = tree.insert(left_child.key, left_child.node_state).unwrap();
+        tree = tree
+            .insert(left_child.key.clone(), left_child.node_state)
+            .unwrap();
         tree = tree
             .insert(RangeInclusive::new(0x200, 0x2FF).unwrap(), NodeState::Free)
             .unwrap();
@@ -718,9 +723,11 @@ mod tests {
             InnerNode::new(RangeInclusive::new(0x200, 0x2FF).unwrap(), NodeState::Free);
         let left_child = InnerNode::new(RangeInclusive::new(0x90, 0x9F).unwrap(), NodeState::Free);
 
-        tree = tree.insert(left_child.key, left_child.node_state).unwrap();
         tree = tree
-            .insert(right_child.key, right_child.node_state)
+            .insert(left_child.key.clone(), left_child.node_state)
+            .unwrap();
+        tree = tree
+            .insert(right_child.key.clone(), right_child.node_state)
             .unwrap();
 
         assert_eq!(
@@ -882,9 +889,9 @@ mod tests {
     #[test]
     fn test_tree_insert_duplicate_negative() {
         let range = RangeInclusive::new(0x100, 0x200).unwrap();
-        let tree = Box::new(InnerNode::new(range, NodeState::Allocated));
-        let res = tree.insert(range, NodeState::Free);
-        assert_eq!(res.unwrap_err(), Error::Overlap(range, range));
+        let tree = Box::new(InnerNode::new(range.clone(), NodeState::Allocated));
+        let res = tree.insert(range.clone(), NodeState::Free);
+        assert_eq!(res.unwrap_err(), Error::Overlap(range.clone(), range));
     }
 
     #[test]
@@ -902,7 +909,7 @@ mod tests {
     #[test]
     fn test_tree_mark_as_allocated_invalid_transition() {
         let range = RangeInclusive::new(0x100, 0x110).unwrap();
-        let mut tree = Box::new(InnerNode::new(range, NodeState::Allocated));
+        let mut tree = Box::new(InnerNode::new(range.clone(), NodeState::Allocated));
         assert_eq!(
             tree.mark_as_allocated(&range).unwrap_err(),
             Error::InvalidStateTransition(range, NodeState::Allocated)
@@ -930,7 +937,7 @@ mod tests {
         let range = RangeInclusive::new(0x100, 0x110).unwrap();
         let range2 = RangeInclusive::new(0x200, 0x2FF).unwrap();
         let mut tree = Box::new(InnerNode::new(range, NodeState::Allocated));
-        tree = tree.insert(range2, NodeState::Free).unwrap();
+        tree = tree.insert(range2.clone(), NodeState::Free).unwrap();
         assert!(tree.mark_as_allocated(&range2).is_ok());
         assert_eq!(
             *tree.search(&range2).unwrap(),
@@ -949,7 +956,7 @@ mod tests {
             NodeState::Free,
         ));
         tree = tree
-            .insert(right_child.key, right_child.node_state)
+            .insert(right_child.key.clone(), right_child.node_state)
             .unwrap();
         tree = tree
             .delete(&RangeInclusive::new(0x200, 0x290).unwrap())
@@ -958,7 +965,9 @@ mod tests {
         tree = tree
             .insert(RangeInclusive::new(0x200, 0x290).unwrap(), NodeState::Free)
             .unwrap();
-        tree = tree.insert(left_child.key, left_child.node_state).unwrap();
+        tree = tree
+            .insert(left_child.key.clone(), left_child.node_state)
+            .unwrap();
         assert!(is_balanced(Some(tree.clone())));
 
         assert_eq!(
