@@ -10,7 +10,8 @@
 use crate::{Error, Result};
 use std::collections::BTreeSet;
 
-/// An unique ID allocator that allows management of IDs in a given interval.
+/// An unique ID allocator that allows management of IDs in a given interval
+/// (inclusive).
 // Internal representation of IdAllocator. Contains the ends of the interval
 // that is managed, a field that points at the next available ID, and a
 // BTreeSet used to store the released IDs. The reason we chose a
@@ -19,12 +20,10 @@ use std::collections::BTreeSet;
 // are sorted so we will always use the first available ID.
 #[derive(Debug)]
 pub struct IdAllocator {
-    // Beginning of the range of IDs that we want to manage.
-    range_base: u32,
+    // The range of IDs that we want to manage.
+    range: std::ops::RangeInclusive<u32>,
     // First available id that was never allocated.
     next_id: Option<u32>,
-    // End of the range of IDs that we want to manage.
-    range_end: u32,
     // Set of all freed ids that can be reused at subsequent allocations.
     freed_ids: BTreeSet<u32>,
 }
@@ -32,22 +31,24 @@ pub struct IdAllocator {
 impl IdAllocator {
     /// Creates a new instance of IdAllocator that will be used to manage the
     /// allocation and release of ids from the interval specified by
-    /// `range_base` and `range_end`
-    pub fn new(range_base: u32, range_end: u32) -> Result<Self> {
-        if range_end < range_base {
-            return Err(Error::InvalidRange(range_base.into(), range_end.into()));
+    /// `range`.
+    pub fn new(range: std::ops::RangeInclusive<u32>) -> Result<Self> {
+        if range.end() < range.start() {
+            return Err(Error::InvalidRange(
+                *range.start() as u64,
+                *range.end() as u64,
+            ));
         }
         Ok(IdAllocator {
-            range_base,
-            next_id: Some(range_base),
-            range_end,
+            range: range.clone(),
+            next_id: Some(*range.start()),
             freed_ids: BTreeSet::<u32>::new(),
         })
     }
 
     fn id_in_range(&self, id: u32) -> bool {
         // Check for out of range.
-        self.range_base <= id && id <= self.range_end
+        self.range.contains(&id)
     }
 
     /// Allocate an ID from the managed range.
@@ -63,7 +64,7 @@ impl IdAllocator {
         }
         // If no id was freed before we return the next available id.
         if let Some(next_id) = self.next_id {
-            if next_id > self.range_end {
+            if next_id > *self.range.end() {
                 return Err(Error::ResourceNotAvailable);
             }
             // Prepare the next available id. If the addition overflows we
@@ -104,11 +105,12 @@ mod tests {
 
     #[test]
     fn test_slot_id_allocation() {
-        let faulty_allocator = IdAllocator::new(23, 5);
+        #[allow(clippy::reversed_empty_ranges)]
+        let faulty_allocator = IdAllocator::new(23..=5);
         assert_eq!(faulty_allocator.unwrap_err(), Error::InvalidRange(23, 5));
-        let mut legacy_irq_allocator = IdAllocator::new(5, 23).unwrap();
-        assert_eq!(legacy_irq_allocator.range_base, 5);
-        assert_eq!(legacy_irq_allocator.range_end, 23);
+        let mut legacy_irq_allocator = IdAllocator::new(5..=23).unwrap();
+        assert_eq!(*legacy_irq_allocator.range.start(), 5);
+        assert_eq!(*legacy_irq_allocator.range.end(), 23);
 
         let id = legacy_irq_allocator.allocate_id().unwrap();
         assert_eq!(id, 5);
@@ -126,7 +128,7 @@ mod tests {
 
     #[test]
     fn test_u32_overflow() {
-        let mut allocator = IdAllocator::new(u32::MAX - 1, u32::MAX).unwrap();
+        let mut allocator = IdAllocator::new(u32::MAX - 1..=u32::MAX).unwrap();
         assert_eq!(allocator.allocate_id().unwrap(), u32::MAX - 1);
         assert_eq!(allocator.allocate_id().unwrap(), u32::MAX);
         let res = allocator.allocate_id();
@@ -136,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_slot_id_free() {
-        let mut legacy_irq_allocator = IdAllocator::new(5, 23).unwrap();
+        let mut legacy_irq_allocator = IdAllocator::new(5..=23).unwrap();
         assert_eq!(
             legacy_irq_allocator.free_id(3).unwrap_err(),
             Error::OutOfRange(3)
@@ -171,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_id_sanity_checks() {
-        let legacy_irq_allocator = IdAllocator::new(5, 23).unwrap();
+        let legacy_irq_allocator = IdAllocator::new(5..=23).unwrap();
 
         assert!(!legacy_irq_allocator.id_in_range(4));
         assert!(legacy_irq_allocator.id_in_range(6));

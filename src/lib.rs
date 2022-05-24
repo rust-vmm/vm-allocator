@@ -37,7 +37,7 @@
 //! impl DeviceManager {
 //!     pub fn new() -> Result<Self> {
 //!         Ok(DeviceManager {
-//!             id_allocator: IdAllocator::new(0, 100)?,
+//!             id_allocator: IdAllocator::new(0..=100)?,
 //!             mmio_allocator: AddressAllocator::new(MMIO_MEM_START, MEM_32BIT_GAP_SIZE)?,
 //!             slots: HashMap::new(),
 //!         })
