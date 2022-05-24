@@ -32,7 +32,7 @@ pub struct IdAllocator {
 impl IdAllocator {
     /// Creates a new instance of IdAllocator that will be used to manage the
     /// allocation and release of ids from the interval specified by
-    /// `range_base` and `range_end`
+    /// `range_base` and `range_end`.
     pub fn new(range_base: u32, range_end: u32) -> Result<Self> {
         if range_end < range_base {
             return Err(Error::InvalidRange(range_base.into(), range_end.into()));
@@ -44,6 +44,17 @@ impl IdAllocator {
             freed_ids: BTreeSet::<u32>::new(),
         })
     }
+    /// Creates a new instance of IdAllocator that will be used to manage the
+    /// allocation and release of ids from the interval specified by
+    /// `range_base` and `range_end`, without checking `range_end < range_base`.
+    pub fn new_unchecked(range_base: u32, range_end: u32) -> Self {
+        IdAllocator {
+            range_base,
+            next_id: Some(range_base),
+            range_end,
+            freed_ids: BTreeSet::<u32>::new(),
+        }
+    }
 
     fn id_in_range(&self, id: u32) -> bool {
         // Check for out of range.
@@ -54,34 +65,65 @@ impl IdAllocator {
     /// We first try to reuse one of the IDs released before. If there is no
     /// ID to reuse we return the next available one from the managed range.
     pub fn allocate_id(&mut self) -> Result<u32> {
-        // If the set containing all freed ids is not empty we extract the
-        // first entry from that set and return it.
-        if !self.freed_ids.is_empty() {
-            let ret_value = *self.freed_ids.iter().next().unwrap();
-            self.freed_ids.remove(&ret_value);
-            return Ok(ret_value);
-        }
-        // If no id was freed before we return the next available id.
-        if let Some(next_id) = self.next_id {
-            if next_id > self.range_end {
-                return Err(Error::ResourceNotAvailable);
+        match self.freed_ids.iter().next() {
+            // If the set containing all freed ids is not empty we extract the
+            // first entry from that set and return it.
+            Some(&free_id) => {
+                self.freed_ids.remove(&free_id);
+                Ok(free_id)
             }
-            // Prepare the next available id. If the addition overflows we
-            // set the next_id field to None and return Overflow at the next
-            // allocation request.
-            self.next_id = next_id.checked_add(1);
-            return Ok(next_id);
+            // If no id was freed before we return the next available id.
+            None => match self.next_id {
+                // Prepare the next available id. If the addition overflows we
+                // set the next_id field to None and return Overflow at the next
+                // allocation request.
+                Some(next_id) if next_id <= self.range_end => {
+                    self.next_id = next_id.checked_add(1);
+                    Ok(next_id)
+                }
+                // If a next id is some but is not within the managed range.
+                Some(_) => Err(Error::ResourceNotAvailable),
+                None => Err(Error::Overflow),
+            },
         }
-        Err(Error::Overflow)
+    }
+    /// Allocate an ID from the managed range.
+    /// We first try to reuse one of the IDs released before. If there is no
+    /// ID to reuse we return the next available one from the managed range.
+    ///
+    /// We do not check if the next available id is within the managed range.
+    /// - When there are no free ids to reuse and we have allocated all ids
+    ///   up to and including u32::MAX when we next call `allocate_id_unchecked()`
+    ///   the next available id will overflow resulting in a panic.
+    /// - When there are no free ids to reuse and we have allocated all ids up
+    ///   to and including `self.range_end` this result return the id
+    ///   `self.range_end+1` which lies outside the managed range.
+    pub fn allocate_id_unchecked(&mut self) -> u32 {
+        match self.freed_ids.iter().next() {
+            // If the set containing all freed ids is not empty we extract the
+            // first entry from that set and return it.
+            Some(&free_id) => {
+                self.freed_ids.remove(&free_id);
+                free_id
+            }
+            // If no id was freed before we return the next available id.
+            None => {
+                // Prepare the next available id. We do not check if the
+                // addition overflows.
+                *self.next_id.as_mut().unwrap() += 1;
+                self.next_id.unwrap() - 1
+            }
+        }
     }
 
     /// Frees an id from the managed range.
-    pub fn free_id(&mut self, id: u32) -> Result<u32> {
+    pub fn free_id(&mut self, id: u32) -> Result<()> {
         // Check if the id belongs to the managed range and if it was not
         // released before. Return error if any of the conditions is not met.
         if !self.id_in_range(id) {
             return Err(Error::OutOfRange(id));
         }
+        // Check if the id has been previously allocated
         if let Some(next_id) = self.next_id {
             if next_id < id {
                 return Err(Error::NeverAllocated(id));
@@ -89,16 +131,25 @@ impl IdAllocator {
         }
 
         // Insert the released id in the set of released id to avoid releasing
-        // it in next iterations.
+        // it in next iterations, checking if the id is already freed.
         self.freed_ids
             .insert(id)
-            .then(|| id)
+            .then(|| ())
             .ok_or(Error::AlreadyReleased(id))
+    }
+    /// Frees an id from the managed range, without checking if the id is within
+    /// range or if the id is currently allocated.
+    pub fn free_id_unchecked(&mut self, id: u32) {
+        // Insert the released id in the set of released id to avoid releasing
+        // it in next iterations.
+        self.freed_ids.insert(id);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use crate::id_allocator::IdAllocator;
     use crate::Error;
 
@@ -123,6 +174,26 @@ mod tests {
             Error::ResourceNotAvailable
         );
     }
+    #[test]
+    fn test_new_unchecked() {
+        let _ = IdAllocator::new_unchecked(23, 5);
+    }
+    #[test]
+    fn test_slot_id_allocation_unchecked() {
+        let mut legacy_irq_allocator = IdAllocator::new_unchecked(5, 23);
+        assert_eq!(legacy_irq_allocator.range_base, 5);
+        assert_eq!(legacy_irq_allocator.range_end, 23);
+
+        let id = legacy_irq_allocator.allocate_id_unchecked();
+        assert_eq!(id, 5);
+        assert_eq!(legacy_irq_allocator.next_id.unwrap(), 6);
+
+        for _ in 1..19 {
+            legacy_irq_allocator.allocate_id_unchecked();
+        }
+
+        assert_eq!(legacy_irq_allocator.allocate_id_unchecked(), 24);
+    }
 
     #[test]
     fn test_u32_overflow() {
@@ -132,6 +203,14 @@ mod tests {
         let res = allocator.allocate_id();
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), Error::Overflow);
+    }
+    #[test]
+    #[should_panic(expected = "attempt to add with overflow")]
+    fn test_u32_overflow_unchecked() {
+        let mut allocator = IdAllocator::new(u32::MAX - 1, u32::MAX).unwrap();
+        assert_eq!(allocator.allocate_id_unchecked(), u32::MAX - 1);
+        assert_eq!(allocator.allocate_id_unchecked(), u32::MAX);
+        let _ = allocator.allocate_id_unchecked();
     }
 
     #[test]
@@ -144,15 +223,15 @@ mod tests {
         assert_eq!(legacy_irq_allocator.freed_ids.len(), 0);
 
         for _ in 1..10 {
-            let _id = legacy_irq_allocator.allocate_id().unwrap();
+            legacy_irq_allocator.allocate_id().unwrap();
         }
 
         let irq = 10;
         legacy_irq_allocator.free_id(irq).unwrap();
         assert!(legacy_irq_allocator.freed_ids.contains(&irq));
         assert_eq!(
-            legacy_irq_allocator.free_id(10).unwrap_err(),
-            Error::AlreadyReleased(10)
+            legacy_irq_allocator.free_id(irq).unwrap_err(),
+            Error::AlreadyReleased(irq)
         );
         let irq = 9;
         legacy_irq_allocator.free_id(irq).unwrap();
@@ -168,7 +247,56 @@ mod tests {
             Error::NeverAllocated(21)
         );
     }
+    #[test]
+    fn test_free_unchecked_out_of_range() {
+        let mut legacy_irq_allocator = IdAllocator::new_unchecked(5, 23);
+        legacy_irq_allocator.free_id_unchecked(3);
+        assert_eq!(legacy_irq_allocator.freed_ids, {
+            let mut set = BTreeSet::new();
+            set.insert(3);
+            set
+        });
+        assert_eq!(legacy_irq_allocator.freed_ids.len(), 1);
+    }
+    #[test]
+    fn test_slot_id_free_unchecked() {
+        let mut legacy_irq_allocator = IdAllocator::new_unchecked(5, 23);
 
+        for _ in 1..10 {
+            legacy_irq_allocator.allocate_id_unchecked();
+        }
+
+        let irq = 10;
+        legacy_irq_allocator.free_id_unchecked(irq);
+        assert!(legacy_irq_allocator.freed_ids.contains(&irq));
+        legacy_irq_allocator.free_id_unchecked(irq);
+        assert_eq!(legacy_irq_allocator.freed_ids, {
+            let mut set = BTreeSet::new();
+            set.insert(irq);
+            set
+        });
+
+        let irq = 9;
+        legacy_irq_allocator.free_id_unchecked(irq);
+        assert_eq!(legacy_irq_allocator.freed_ids.len(), 2);
+        assert_eq!(*legacy_irq_allocator.freed_ids.iter().next().unwrap(), 9);
+
+        let irq = legacy_irq_allocator.allocate_id_unchecked();
+        assert_eq!(irq, 9);
+        assert!(!legacy_irq_allocator.freed_ids.contains(&irq));
+        assert_eq!(legacy_irq_allocator.freed_ids.len(), 1);
+    }
+    #[test]
+    fn test_free_unchecked_never_allocated() {
+        let irq = 21;
+        let mut legacy_irq_allocator = IdAllocator::new_unchecked(5, 23);
+        legacy_irq_allocator.free_id_unchecked(irq);
+        assert_eq!(legacy_irq_allocator.freed_ids, {
+            let mut set = BTreeSet::new();
+            set.insert(irq);
+            set
+        });
+    }
     #[test]
     fn test_id_sanity_checks() {
         let legacy_irq_allocator = IdAllocator::new(5, 23).unwrap();
