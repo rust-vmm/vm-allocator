@@ -41,6 +41,7 @@ pub fn align_up(address: u64, alignment: u64) -> Result<u64> {
 /// - Allocated -> Free: IntervalTree::free()
 /// - * -> None: IntervalTree::delete()
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NodeState {
     /// Node is free.
     Free,
@@ -56,6 +57,7 @@ impl NodeState {
 
 /// Internal tree node to implement interval tree.
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct InnerNode {
     /// Interval handled by this node.
     key: RangeInclusive,
@@ -490,6 +492,7 @@ fn height(node: &Option<Box<InnerNode>>) -> u64 {
 
 /// An interval tree implementation specialized for VMM memory slots management.
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IntervalTree {
     root: Option<Box<InnerNode>>,
 }

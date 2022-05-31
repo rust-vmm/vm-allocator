@@ -158,6 +158,7 @@ pub type Result<T> = result::Result<T, Error>;
 /// ```
 // This structure represents the key of the Node object in the interval tree implementation.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Hash, Ord, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RangeInclusive {
     /// Lower boundary of the interval.
     start: u64,
