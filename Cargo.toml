@@ -12,3 +12,4 @@ edition = "2018"
 [dependencies]
 libc = "0.2.39"
 thiserror = "2.0"
+serde = { version = "1.0.137", optional = true, features = ["derive"] }
