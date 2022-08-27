@@ -245,6 +245,19 @@ mod tests {
     }
 
     #[test]
+    fn test_allow_range_size_one_left() {
+        let mut pool = AddressAllocator::new(1, 1000).unwrap();
+        assert_eq!(
+            pool.allocate(10, 2, AllocPolicy::FirstMatch).unwrap(),
+            RangeInclusive::new(2, 11).unwrap()
+        );
+        assert_eq!(
+            pool.allocate(1, 1, AllocPolicy::FirstMatch).unwrap(),
+            RangeInclusive::new(1, 1).unwrap()
+        );
+    }
+
+    #[test]
     fn test_allocate_address_fail_free_and_realloc() {
         let mut pool = AddressAllocator::new(0x0, 0x1000).unwrap();
         //First allocation fails

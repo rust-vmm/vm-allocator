@@ -171,7 +171,7 @@ impl RangeInclusive {
         // The length of the interval [0, u64::MAX] is u64::MAX + 1 which does
         // not fit in a u64::MAX, hence we return `Error::InvalidRange` when
         // there is an attempt to use that range.
-        if start >= end || (start == 0 && end == u64::MAX) {
+        if start > end || (start == 0 && end == u64::MAX) {
             return Err(Error::InvalidRange(start, end));
         }
         Ok(RangeInclusive { start, end })
@@ -311,8 +311,8 @@ mod tests {
             Error::InvalidRange(2, 1)
         );
         assert_eq!(
-            RangeInclusive::new(1, 1).unwrap_err(),
-            Error::InvalidRange(1, 1)
+            RangeInclusive::new(0, u64::MAX).unwrap_err(),
+            Error::InvalidRange(0, u64::MAX)
         );
     }
 
