@@ -228,7 +228,7 @@ impl RangeInclusive {
 ///     Error::UnalignedAddress
 /// );
 /// ```
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Constraint {
     /// Size to allocate.
     size: u64,
@@ -283,7 +283,7 @@ impl Constraint {
 }
 
 /// Policy for resource allocation.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum AllocPolicy {
     /// Allocate the first matched entry.
     FirstMatch,
