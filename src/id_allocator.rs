@@ -92,7 +92,7 @@ impl IdAllocator {
         // it in next iterations.
         self.freed_ids
             .insert(id)
-            .then(|| id)
+            .then_some(id)
             .ok_or(Error::AlreadyReleased(id))
     }
 }
