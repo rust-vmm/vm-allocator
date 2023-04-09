@@ -1,5 +1,6 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 OR BSD-3-Clause
+
 //! Manages system resources that can be allocated to VMs and their devices.
 //!
 //! # Example
