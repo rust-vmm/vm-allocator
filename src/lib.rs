@@ -283,21 +283,16 @@ impl Constraint {
 }
 
 /// Policy for resource allocation.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub enum AllocPolicy {
     /// Allocate the first matched entry.
+    #[default]
     FirstMatch,
     /// Allocate first matched entry from the end of the range.
     LastMatch,
     /// Allocate a memory slot starting with the specified address
     /// if it is available.
     ExactMatch(u64),
-}
-
-impl Default for AllocPolicy {
-    fn default() -> Self {
-        AllocPolicy::FirstMatch
-    }
 }
 
 #[cfg(test)]
