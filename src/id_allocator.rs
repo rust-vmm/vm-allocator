@@ -18,6 +18,7 @@ use std::collections::BTreeSet;
 // O(logN) compared to Vec for example, another benefit is that the entries
 // are sorted so we will always use the first available ID.
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IdAllocator {
     // Beginning of the range of IDs that we want to manage.
     range_base: u32,

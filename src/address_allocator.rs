@@ -22,6 +22,7 @@ use crate::{AllocPolicy, Constraint, Error, RangeInclusive, Result};
 /// The `AddressAllocator` manages an address space by exporting functionality to reserve and
 /// free address ranges based on a user defined [Allocation Policy](enum.AllocPolicy.html).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AddressAllocator {
     // Address space that we want to manage.
     address_space: RangeInclusive,
