@@ -116,7 +116,7 @@ impl InnerNode {
         let r = height(&self.right);
 
         match (l as i64) - (r as i64) {
-            1 | 0 | -1 => self,
+            -1..=1 => self,
             // Safe to unwrap as rotate_left_successor always returns Some when
             // the current node has a left child and we just checked that it
             // has at least one child otherwise this difference would not be two.
