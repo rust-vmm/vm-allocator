@@ -5,12 +5,15 @@
 ### Added
 ### Changed
 ### Fixed
+### Removed
+### Deprecated
+
+## [v0.1.1]
+
+### Fixed
 
 - [[#44]](https://github.com/rust-vmm/vm-allocator/pull/44): Fixed issue that
   did not allow the creating of inclusive ranges of size 1.
-
-### Removed
-### Deprecated
 
 ## [v0.1.0]
 
