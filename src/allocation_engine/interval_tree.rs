@@ -615,7 +615,7 @@ impl IntervalTree {
         }
         // If the deleted range did not end at u64::MAX we try to find ranges
         // that are placed to its left so we can merge them together.
-        if range.end() < std::u64::MAX {
+        if range.end() < u64::MAX {
             if let Some(node) = self.search_superset(&RangeInclusive::new(
                 range.end().checked_add(1).ok_or(Error::Overflow)?,
                 range.end().checked_add(2).ok_or(Error::Overflow)?,
