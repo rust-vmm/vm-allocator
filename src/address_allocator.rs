@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn test_new_fails_overflow() {
         assert_eq!(
-            AddressAllocator::new(u64::max_value(), 0x100).unwrap_err(),
+            AddressAllocator::new(u64::MAX, 0x100).unwrap_err(),
             Error::Overflow
         );
     }
