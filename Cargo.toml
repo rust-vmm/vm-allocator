@@ -11,4 +11,4 @@ edition = "2018"
 
 [dependencies]
 libc = "0.2.39"
-thiserror = "1.0"
+thiserror = "2.0"
