@@ -171,26 +171,32 @@ mod tests {
     fn test_allocate_with_alignment_first_ok() {
         let mut pool = AddressAllocator::new(0x1000, 0x1000).unwrap();
         assert_eq!(pool.available(), 0x1000);
-        // Allocate aligned 0x110
+        // Allocate 0x110
         assert_eq!(
             pool.allocate(0x110, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
             RangeInclusive::new(0x1000, 0x110F).unwrap()
         );
         assert_eq!(pool.available(), 0x1000 - 0x110);
-        // Allocate aligned 0x100
+        // Allocate 0x100
         assert_eq!(
             pool.allocate(0x100, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
             RangeInclusive::new(0x1200, 0x12FF).unwrap()
         );
         assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100);
-        // Allocate unaligned 0x10
+        // Allocate 0x10
         assert_eq!(
             pool.allocate(0x10, 0x100, AllocPolicy::FirstMatch).unwrap(),
             RangeInclusive::new(0x1300, 0x130F).unwrap()
         );
-        assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100 - 0x100);
+        assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100 - 0x10);
+        // Allocate unaligned size 101
+        assert_eq!(
+            pool.allocate(101, 0x100, AllocPolicy::FirstMatch).unwrap(),
+            RangeInclusive::new(0x1400, 0x14FF).unwrap()
+        );
+        assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100 - 0x10 - 0x100);
     }
 
     #[test]
