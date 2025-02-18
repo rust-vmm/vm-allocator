@@ -250,17 +250,17 @@ mod tests {
     fn test_tree_allocate_address_free_and_realloc() {
         let mut pool = AddressAllocator::new(0x1000, 0x1000).unwrap();
         assert_eq!(pool.available(), 0x1000);
-        
+        // Allocate 0x800
         assert_eq!(
             pool.allocate(0x800, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
             RangeInclusive::new(0x1000, 0x17FF).unwrap()
         );
         assert_eq!(pool.available(), 0x1000 - 0x800);
-
+        // Free 0x800
         let _ = pool.free(&RangeInclusive::new(0x1000, 0x17FF).unwrap());
         assert_eq!(pool.available(), 0x1000);
-        
+        // Allocate 0x800 again
         assert_eq!(
             pool.allocate(0x800, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
