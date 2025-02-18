@@ -74,7 +74,7 @@ impl AddressAllocator {
     /// Deletes the specified memory slot or returns `ResourceNotAvailable` if
     /// the node was not allocated before.
     pub fn free(&mut self, key: &RangeInclusive) -> Result<()> {
-        self.interval_tree.free(key);
+        self.interval_tree.free(key)?;
         self.available += key.len() as usize;
         Ok(())
     }
