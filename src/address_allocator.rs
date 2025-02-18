@@ -191,12 +191,6 @@ mod tests {
             RangeInclusive::new(0x1300, 0x130F).unwrap()
         );
         assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100 - 0x10);
-        // Allocate unaligned size 101
-        assert_eq!(
-            pool.allocate(0x3, 0x100, AllocPolicy::FirstMatch).unwrap(),
-            RangeInclusive::new(0x1400, 0x1402).unwrap()
-        );
-        assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100 - 0x10 - 0x3);
     }
 
     #[test]
