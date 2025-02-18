@@ -68,7 +68,7 @@ impl AddressAllocator {
         let constraint = Constraint::new(size, alignment, policy)?;
         let allocated = self.interval_tree.allocate(constraint);
         self.available -= allocated.len() as usize;
-        Ok(allocated)
+        allocated
     }
 
     /// Deletes the specified memory slot or returns `ResourceNotAvailable` if
@@ -76,7 +76,7 @@ impl AddressAllocator {
     pub fn free(&mut self, key: &RangeInclusive) -> Result<()> {
         self.interval_tree.free(key);
         self.available += key.len() as usize;
-        Ok()
+        Ok(())
     }
 
     /// Returns the available memory size in this allocator.
