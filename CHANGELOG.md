@@ -4,8 +4,8 @@
 
 ### Added
 
-- Added `available()` API in `AddressAllocator` to allow get thee
-  available memories after `allocate/free()`
+- Added `available()` API in `AddressAllocator` to allow get the
+  available memories after `allocate/free()`s
 
 ### Changed
 ### Fixed
