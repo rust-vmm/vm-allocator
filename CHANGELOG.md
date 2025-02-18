@@ -3,6 +3,10 @@
 ## Upcoming version
 
 ### Added
+
+- Added `available()` API in `AddressAllocator` to allow get thee
+  available memories after `allocate/free()`
+
 ### Changed
 ### Fixed
 ### Removed
