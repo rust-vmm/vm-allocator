@@ -66,9 +66,9 @@ impl AddressAllocator {
         policy: AllocPolicy,
     ) -> Result<RangeInclusive> {
         let constraint = Constraint::new(size, alignment, policy)?;
-        let allocated = self.interval_tree.allocate(constraint);
+        let allocated = self.interval_tree.allocate(constraint)?;
         self.available -= allocated.len() as usize;
-        allocated
+        Ok(allocated)
     }
 
     /// Deletes the specified memory slot or returns `ResourceNotAvailable` if
