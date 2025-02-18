@@ -3,6 +3,10 @@
 ## Upcoming version
 
 ### Added
+
+- Added `used()` API in `AddressAllocator` to allow
+  getting the used memories after `allocate/free()`s
+
 ### Changed
 ### Fixed
 ### Removed
