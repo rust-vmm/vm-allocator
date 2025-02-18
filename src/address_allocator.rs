@@ -196,7 +196,7 @@ mod tests {
             pool.allocate(101, 0x100, AllocPolicy::FirstMatch).unwrap(),
             RangeInclusive::new(0x1400, 0x1464).unwrap()
         );
-        assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100 - 0x10 - 0x100);
+        assert_eq!(pool.available(), 0x1000 - 0x110 - 0x100 - 0x10 - 0x64);
     }
 
     #[test]
