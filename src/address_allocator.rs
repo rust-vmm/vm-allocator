@@ -72,6 +72,16 @@ impl AddressAllocator {
     pub fn free(&mut self, key: &RangeInclusive) -> Result<()> {
         self.interval_tree.free(key)
     }
+
+    /// First address of the allocator.
+    pub fn base(&self) -> u64 {
+        self.address_space.start()
+    }
+
+    /// Last address of the allocator.
+    pub fn end(&self) -> u64 {
+        self.address_space.end()
+    }
 }
 
 #[cfg(test)]
