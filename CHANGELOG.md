@@ -3,16 +3,19 @@
 ## Upcoming version
 
 ### Added
+### Changed
+### Fixed
+### Removed
+### Deprecated
+
+## [v0.1.2]
+
+### Added
 
 - [[#40]](https://github.com/rust-vmm/vm-allocator/pull/40): Added serde
   support for IdAllocator and AddressAllocator.
 - [[#99]](https://github.com/rust-vmm/vm-allocator/pull/99): Added APIs to
   get the base address and size of an AddressAllocator.
-
-### Changed
-### Fixed
-### Removed
-### Deprecated
 
 ## [v0.1.1]
 
