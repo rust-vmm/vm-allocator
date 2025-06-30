@@ -1,6 +1,6 @@
 [package]
 name = "vm-allocator"
-version = "0.1.2"
+version = "0.1.3"
 description = "Helpers for allocating resources needed during the lifetime of a VM."
 repository = "https://github.com/rust-vmm/vm-allocator"
 authors = ["rust-vmm AWS maintainers <rust-vmm-maintainers@amazon.com>"]
