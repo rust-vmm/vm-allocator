@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 // BTreeSet is that the average complexity for deletion and insertion is
 // O(logN) compared to Vec for example, another benefit is that the entries
 // are sorted so we will always use the first available ID.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IdAllocator {
     // Beginning of the range of IDs that we want to manage.
