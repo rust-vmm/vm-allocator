@@ -8,6 +8,13 @@
 ### Removed
 ### Deprecated
 
+## [v0.1.3]
+
+### Added 
+
+- [[#102]](https://github.com/rust-vmm/vm-allocator/pull/102): Derived
+  Clone for IdAllocator type.
+
 ## [v0.1.2]
 
 ### Added
