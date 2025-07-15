@@ -55,7 +55,7 @@ impl AddressAllocator {
     /// # Arguments:
     /// - `size`: size to allocate.
     /// - `alignment`: alignment to be used for the allocated resources.
-    ///            Valid alignments are a power of 2.
+    ///   Valid alignments are a power of 2.
     /// - `policy`: allocation policy.
     pub fn allocate(
         &mut self,

@@ -249,7 +249,7 @@ impl Constraint {
     /// # Arguments:
     /// - `size`: size to allocate.
     /// - `align`: alignment to be used for the allocated resources.
-    ///            Valid alignments are a power of 2.
+    ///   Valid alignments are a power of 2.
     /// - `policy`: allocation policy.
     pub fn new(size: u64, align: u64, policy: AllocPolicy) -> Result<Self> {
         if size == 0 {
