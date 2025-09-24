@@ -3,6 +3,9 @@
 ## Upcoming version
 
 ### Added
+
+- Support for no_std environments.
+
 ### Changed
 ### Fixed
 ### Removed

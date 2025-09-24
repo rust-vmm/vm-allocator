@@ -8,7 +8,7 @@
 //! that can be abstracted to an integer.
 
 use crate::{Error, Result};
-use std::collections::BTreeSet;
+use alloc::collections::BTreeSet;
 
 /// An unique ID allocator that allows management of IDs in a given interval.
 // Internal representation of IdAllocator. Contains the ends of the interval
