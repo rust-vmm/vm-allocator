@@ -4,6 +4,8 @@
 
 use std::cmp::{max, Ordering};
 
+use alloc::boxed::Box;
+
 use crate::{AllocPolicy, Constraint, Error, RangeInclusive, Result};
 
 /// Returns the first multiple of `alignment` that is lower or equal to the
