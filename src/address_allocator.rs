@@ -30,6 +30,8 @@ pub struct AddressAllocator {
     // tree will represent a memory location and can have two states either
     // `NodeState::Free` or `NodeState::Allocated`.
     interval_tree: IntervalTree,
+    // Used memory space in the address space.
+    used: usize,
 }
 
 impl AddressAllocator {
@@ -44,6 +46,7 @@ impl AddressAllocator {
         Ok(AddressAllocator {
             address_space: aux_range,
             interval_tree: IntervalTree::new(aux_range),
+            used: 0,
         })
     }
 
@@ -64,13 +67,30 @@ impl AddressAllocator {
         policy: AllocPolicy,
     ) -> Result<RangeInclusive> {
         let constraint = Constraint::new(size, alignment, policy)?;
-        self.interval_tree.allocate(constraint)
+        let allocated = self.interval_tree.allocate(constraint)?;
+        self.used = self
+            .used
+            .checked_add(allocated.len() as usize)
+            .expect("Failed to calculate used memory");
+        Ok(allocated)
     }
 
     /// Deletes the specified memory slot or returns `ResourceNotAvailable` if
     /// the node was not allocated before.
     pub fn free(&mut self, key: &RangeInclusive) -> Result<()> {
-        self.interval_tree.free(key)
+        self.interval_tree.free(key)?;
+        self.used = self
+            .used
+            .checked_sub(key.len() as usize)
+            .expect("Failed to calculate used memory");
+        Ok(())
+    }
+
+    /// Returns the used memory size in this allocator.
+    /// NOTE that due to fragmentations, not all unused memory may be available
+    /// for next `allocate()` call!
+    pub fn used(&self) -> usize {
+        self.used
     }
 
     /// First address of the allocator.
@@ -169,20 +189,27 @@ mod tests {
     #[test]
     fn test_allocate_with_alignment_first_ok() {
         let mut pool = AddressAllocator::new(0x1000, 0x1000).unwrap();
+        assert_eq!(pool.used(), 0);
+        // Allocate 0x110
         assert_eq!(
             pool.allocate(0x110, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
             RangeInclusive::new(0x1000, 0x110F).unwrap()
         );
+        assert_eq!(pool.used(), 0x110);
+        // Allocate 0x100
         assert_eq!(
             pool.allocate(0x100, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
             RangeInclusive::new(0x1200, 0x12FF).unwrap()
         );
+        assert_eq!(pool.used(), 0x110 + 0x100);
+        // Allocate 0x10
         assert_eq!(
             pool.allocate(0x10, 0x100, AllocPolicy::FirstMatch).unwrap(),
             RangeInclusive::new(0x1300, 0x130F).unwrap()
         );
+        assert_eq!(pool.used(), 0x110 + 0x100 + 0x10);
     }
 
     #[test]
@@ -241,18 +268,24 @@ mod tests {
     #[test]
     fn test_tree_allocate_address_free_and_realloc() {
         let mut pool = AddressAllocator::new(0x1000, 0x1000).unwrap();
+        assert_eq!(pool.used(), 0);
+        // Allocate 0x800
         assert_eq!(
             pool.allocate(0x800, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
             RangeInclusive::new(0x1000, 0x17FF).unwrap()
         );
-
+        assert_eq!(pool.used(), 0x800);
+        // Free 0x800
         let _ = pool.free(&RangeInclusive::new(0x1000, 0x17FF).unwrap());
+        assert_eq!(pool.used(), 0);
+        // Allocate 0x800 again
         assert_eq!(
             pool.allocate(0x800, 0x100, AllocPolicy::FirstMatch)
                 .unwrap(),
             RangeInclusive::new(0x1000, 0x17FF).unwrap()
         );
+        assert_eq!(pool.used(), 0x800);
     }
 
     #[test]
