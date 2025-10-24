@@ -74,6 +74,12 @@
 //! ```
 
 #![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+#[cfg(not(feature = "std"))]
+extern crate core as std;
 
 mod address_allocator;
 /// Allocation engine used by address allocator.
