@@ -76,6 +76,25 @@ impl IdAllocator {
         Err(Error::Overflow)
     }
 
+    /// Returns `true` if `id` is currently allocated from the managed range.
+    ///
+    /// An id is considered allocated if it has been handed out by
+    /// [`allocate_id`](Self::allocate_id) and not since released by
+    /// [`free_id`](Self::free_id). Ids outside the managed range are never
+    /// allocated.
+    pub fn is_allocated(&self, id: u32) -> bool {
+        if !self.id_in_range(id) || self.freed_ids.contains(&id) {
+            return false;
+        }
+        // An id is allocated iff it has already been handed out. `next_id` is
+        // the next id to hand out; `None` means the whole range has been
+        // handed out.
+        match self.next_id {
+            Some(next) => id < next,
+            None => true,
+        }
+    }
+
     /// Frees an id from the managed range.
     pub fn free_id(&mut self, id: u32) -> Result<u32> {
         // Check if the id belongs to the managed range and if it was not
@@ -185,6 +204,66 @@ mod tests {
         assert_eq!(allocator.free_id(8).unwrap_err(), Error::NeverAllocated(8));
         assert_eq!(allocator.freed_ids.len(), 0);
     }
+
+    #[test]
+    fn test_is_allocated() {
+        let mut allocator = IdAllocator::new(5, 23).unwrap();
+
+        assert!(!allocator.is_allocated(4));
+        assert!(!allocator.is_allocated(24));
+
+        assert!(!allocator.is_allocated(10));
+
+        let id = allocator.allocate_id().unwrap();
+        assert_eq!(id, 5);
+        assert!(allocator.is_allocated(5));
+        assert!(!allocator.is_allocated(6));
+
+        allocator.free_id(5).unwrap();
+        assert!(!allocator.is_allocated(5));
+
+        let id = allocator.allocate_id().unwrap();
+        assert_eq!(id, 5);
+        assert!(allocator.is_allocated(5));
+    }
+
+    #[test]
+    fn test_is_allocated_full_range() {
+        let mut allocator = IdAllocator::new(u32::MAX - 1, u32::MAX).unwrap();
+
+        assert!(!allocator.is_allocated(u32::MAX - 1));
+        assert!(!allocator.is_allocated(u32::MAX));
+
+        assert_eq!(allocator.allocate_id().unwrap(), u32::MAX - 1);
+        assert!(allocator.is_allocated(u32::MAX - 1));
+        assert!(!allocator.is_allocated(u32::MAX));
+
+        assert_eq!(allocator.allocate_id().unwrap(), u32::MAX);
+        assert!(allocator.next_id.is_none());
+        assert!(allocator.is_allocated(u32::MAX));
+
+        allocator.free_id(u32::MAX).unwrap();
+        assert!(!allocator.is_allocated(u32::MAX));
+        assert!(allocator.is_allocated(u32::MAX - 1));
+    }
+
+    #[test]
+    fn test_is_allocated_with_freed() {
+        let mut allocator = IdAllocator::new(5, 23).unwrap();
+        allocator.allocate_id().unwrap();
+        allocator.allocate_id().unwrap();
+
+        assert_eq!(allocator.next_id, Some(7));
+
+        assert!(allocator.is_allocated(6));
+        assert!(!allocator.is_allocated(7));
+
+        allocator.free_id(5).unwrap();
+        assert!(!allocator.is_allocated(5));
+        assert!(allocator.is_allocated(6));
+        assert!(!allocator.is_allocated(7));
+    }
+
     #[test]
     fn test_id_sanity_checks() {
         let legacy_irq_allocator = IdAllocator::new(5, 23).unwrap();
