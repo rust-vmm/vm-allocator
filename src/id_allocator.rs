@@ -84,7 +84,7 @@ impl IdAllocator {
             return Err(Error::OutOfRange(id));
         }
         if let Some(next_id) = self.next_id {
-            if next_id < id {
+            if next_id <= id {
                 return Err(Error::NeverAllocated(id));
             }
         }
@@ -170,6 +170,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_free_id_never_allocated_boundary() {
+        let mut allocator = IdAllocator::new(5, 23).unwrap();
+
+        assert_eq!(allocator.next_id.unwrap(), 5);
+        assert_eq!(allocator.free_id(5).unwrap_err(), Error::NeverAllocated(5));
+        assert_eq!(allocator.freed_ids.len(), 0);
+
+        for _ in 0..3 {
+            allocator.allocate_id().unwrap();
+        }
+        assert_eq!(allocator.next_id.unwrap(), 8);
+        assert_eq!(allocator.free_id(8).unwrap_err(), Error::NeverAllocated(8));
+        assert_eq!(allocator.freed_ids.len(), 0);
+    }
     #[test]
     fn test_id_sanity_checks() {
         let legacy_irq_allocator = IdAllocator::new(5, 23).unwrap();
