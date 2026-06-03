@@ -1,6 +1,6 @@
 [package]
 name = "vm-allocator"
-version = "0.1.3"
+version = "0.1.4"
 description = "Helpers for allocating resources needed during the lifetime of a VM."
 repository = "https://github.com/rust-vmm/vm-allocator"
 authors = ["rust-vmm AWS maintainers <rust-vmm-maintainers@amazon.com>"]
@@ -15,5 +15,5 @@ std = []
 
 [dependencies]
 libc = "0.2.39"
-thiserror = {version= "2.0", default-features = false}
+thiserror = { version = "2.0", default-features = false }
 serde = { version = "1.0.137", optional = true, features = ["derive"] }

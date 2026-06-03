@@ -3,19 +3,23 @@
 ## Upcoming version
 
 ### Added
+### Changed
+### Fixed
+### Removed
+### Deprecated
+
+## [v0.1.4]
+
+### Added
 
 - Support for no_std environments.
 - [[#120]](https://github.com/rust-vmm/vm-allocator/pull/120): `IdAllocator::is_allocated` to query whether a given id is currently
   allocated.
 
-### Changed
 ### Fixed
 
 - [[#120]](https://github.com/rust-vmm/vm-allocator/pull/120): `IdAllocator::free_id` incorrectly accepted freeing `next_id` (an id that was
   never allocated), which could lead to the same id being allocated twice.
-
-### Removed
-### Deprecated
 
 ## [v0.1.3]
 
